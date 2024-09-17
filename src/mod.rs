@@ -10,12 +10,12 @@ pub use syn::Item;
 
 pub mod ir;
 pub mod parse;
-pub mod transform;
+// pub mod transform;
 pub mod generate;
 pub mod util;
 
 pub use ir::*;
 pub use parse::*;
-pub use transform::*;
+// pub use transform::*;
 pub use generate::*;
 pub use util::*;

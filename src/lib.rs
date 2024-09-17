@@ -1,18 +1,7 @@
-mod r#mod;
 use proc_macro::TokenStream;
-use proc_macro2::{
-    Ident,
-    Span,
-};
+
+mod r#mod;
 use r#mod::*;
-use syn::{
-    parse_quote,
-    punctuated::Punctuated,
-    spanned::Spanned,
-    token::Comma,
-    FnArg,
-    ItemFn,
-};
 
 /*========================================================================*/
 
@@ -26,13 +15,10 @@ use syn::{
 
 // This main macro retains its name/identifier from the original `deno_bindgen` crate for backwards compatibility and ease of switching, despite being an entirely unrelated crate.
 
+// TODO: Rename this fn to `deno_bindgen2` and provide an alias for the old `deno_bindgen` attribute macro
+
 #[proc_macro_attribute]
 #[proc_macro_error::proc_macro_error]
-pub fn deno_bindgen(
-    attr: proc_macro::TokenStream,
-    input: proc_macro::TokenStream,
-) -> proc_macro::TokenStream {
+pub fn deno_bindgen(attr: TokenStream,input: TokenStream) -> TokenStream {
     Parser::from_attr_stream(attr, input)
-        .parse()
-        .transform()
 }

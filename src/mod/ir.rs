@@ -1,97 +1,113 @@
-use proc_macro::TokenStream;
-use syn::{
-    Ident, ItemFn, Pat, PatType
+use syn::{Ident, Type};
 
-};
-
-// Trivial or fundamental types, a Rust equivalent type that implements the `Copy` trait
-// these types may be "trivially" copied by the `std::mem` module without any other special action
-#[derive(Clone, Debug, Eq, PartialEq, Hash, Default)]
-pub enum Native {
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
+pub enum TrivialType {
     #[default]
     Void,
     Bool,
     U8,
-    I8,
     U16,
-    I16,
     U32,
-    I32,
     U64,
+    I8,
+    I16,
+    I32,
     I64,
-    USize,
-    ISize,
+    Usize,
+    Isize,
     F32,
     F64,
-    Pointer, // a thin pointer
-    Buffer(Box<Native>),  // pointer to a slice
-    Function, // function pointer
-             // Struct(Box<[Trivial]>), // TODO: Handle struct parameters/return values in the future
-}
 
-impl Native {
-    pub fn is_numeric(&self) -> bool {
-        match &self {
-            Native::Pointer
-            | Native::Buffer(_)
-            | Native::Function => false,
-            _ => true,
-        }
-    }
+    // pointer types
+    Pointer(Type),
+    Buffer,
+    // Function, // TODO: unimpeleted types that are supported by the ffi
+
+    // Struct(Box<[Trivial]>),
 }
 
 #[derive(Clone, Debug)]
-pub enum NonTrivial {
-    Tuple(Vec<IrType>), // breaks down complex types into their simple raw parts. should handle nested tuples
-    String,             // must be converted to string slice
-    StringSlice,
-    Slice(Box<IrType>),     // must be converted to a (buffer ptr, usize) tupple
-    Reference(Box<IrType>), // must be checked for existence of NonTrivial because this is unsafe
-    ReferenceMut(Box<IrType>),
-    UserDefined(&'static str),
-    Receiver(syn::Receiver),
+pub struct ParameterType {
+    pub ty: TrivialType,
+    pub ident: Ident,
 }
 
-// types may be trivial/fundamental, or non-trivial
-// the determinant for a trivial type is that it can be copied into memory with memcpy without doing anything
+/*================================ COMPOSITE TYPES ==============================*/
+
+#[derive(Clone, Debug)]
+pub struct ParenType {
+    pub elem: Box<IrType>
+}
+
+#[derive(Clone, Debug)]
+pub struct TupleType {
+    pub elems: Vec<IrType>,
+}
+
+#[derive(Clone, Debug)]
+pub struct ReferenceType {
+    pub _mut: bool,
+    pub elem: Box<IrType>,
+}
+
+#[derive(Clone, Debug)]
+pub struct SliceType {
+    pub ptr: ParameterType,
+    pub len: ParameterType,
+}
+
+
+// In Deno, vector types may be implemented as an array of a single type. If the type is unsupported, it could contain a pointer object to a custom type
+#[derive(Clone, Debug)]
+pub struct VecType {
+
+}
+
+#[derive(Clone, Debug)]
+pub struct CustomType {
+    pub ty: Ident,
+    pub ptr: ParameterType,
+}
+
+// Provide lifetime annotations to self types in JavaScript to check validity
+#[derive(Clone, Debug)]
+pub struct SelfType {
+
+}
+
 #[derive(Clone, Debug)]
 pub enum IrType {
-    Native(Native), // these are types directly supported by Deno without further implementation
-    NonTrivial(NonTrivial), // types that are not directly supported but can be trasmuted to a compatible type
-    Unsupported(syn::Type), // these are types that `deno_bindgen` currently does not support or have no way to be used in JavaScript space
-}
+    // Terminating type. Appears directly in function arguments
+    Parameter(ParameterType),
 
-impl IrType {
-    pub fn is_trivial(&self) -> bool {
-        match &self {
-            IrType::Native(_) => true,
-            _ => false,
-        }
-    }
-    pub fn is_non_trivial(&self) -> bool {
-        match &self {
-            IrType::NonTrivial(_) => true,
-            _ => false,
-        }
-    }
-}
+    // Recursive types. Must be composed/decomposed
+    Paren(ParenType),
+    Tuple(TupleType),
 
-// used for outputs
-pub struct NamedIrType {
-    ident: Ident,
-    ty: IrType,
-}
-/*================== TRANSFORM STRUCTS =================*/
+    // Container types
+    Reference(ReferenceType),
+    Slice(SliceType),
+    Str(SliceType),
+    String(SliceType),
 
-pub enum IrItem {
-    Fn(IrFn, ItemFn),
-    // Struct(IrType, ItemStruct),
-    // Impl(IrType, ItemImpl),
-    Unknown(TokenStream),
+    Custom(CustomType), // avoid creating double references
 }
+/*================================ PARAMETER TYPES ==============================*/
 
-pub struct IrFn {
-    pub source: ItemFn, // this is the immutable function that will be passed inside the block
+// structs for generating a collection of associated functions based on whether the result type is supported or not
+pub struct TrivialFn {
     pub inputs: Vec<IrType>,
-    pub output: IrType,
+    pub output: TrivialType,
 }
+
+pub enum CompositeFn {
+    Tuple,  // returns a tuple type. construct tuple from each element. provide a deallocator
+    Custom, // returns a custom type or a custom fn. should provide a deallocator
+}
+
+
+pub enum SymbolSignature {
+    Trivial(TrivialFn),
+    Composite()
+}
+
