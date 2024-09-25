@@ -21,7 +21,7 @@ pub enum Trivial {
     F64,
 
     // pointer types
-    Pointer(Type),
+    Pointer(&'static str),
     Buffer,
     // Function, // TODO: unimpeleted types that are supported by the ffi
 
@@ -35,11 +35,11 @@ pub enum IrType {
     Ref(Box<IrType>),
     Paren(Box<IrType>),
     Tuple(Vec<IrType>),
-    Slice(Type), // [pointer, usize]
+    Slice(&'static str), // [pointer, usize]
     Str, // [pointer, usize]
     // String(SliceType),
     // Vec(),
-    Custom(Type), // [pointer]
+    Custom(&'static str), // [pointer]
 }
 
 impl Default for IrType {
@@ -160,13 +160,13 @@ impl IrType {
                 parse_quote!(deno_bindgen2::RawType::Tuple(&[#(#exprs),*]))
             },
             IrType::Slice(ty) => {
-                parse_quote!(deno_bindgen2::RawType::Slice(parse_quote!(#ty)))
+                parse_quote!(deno_bindgen2::RawType::Slice(#ty))
             },
             IrType::Str => {
                 parse_quote!(deno_bindgen2::RawType::Str)
             },
             IrType::Custom(ty) => {
-                parse_quote!(deno_bindgen2::RawType::Custom(parse_quote!(#ty)))
+                parse_quote!(deno_bindgen2::RawType::Custom(#ty))
             },
         }
     }

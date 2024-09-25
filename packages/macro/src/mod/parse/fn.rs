@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use proc_macro2::{TokenStream, Ident, Span};
 use proc_macro_error::{emit_error, emit_warning};
 use quote::{quote, ToTokens};
@@ -189,14 +191,14 @@ fn parse_output(
                         ));
                         Ok((
                             parse_quote!(*mut #ty),
-                            IrType::Custom(ty.clone())
+                            IrType::Custom(Box::leak(ty.to_token_stream().to_string().into_boxed_str()))
                         ))
                     }
                 }
             }
         },
         Type::Ptr(TypePtr{ ref elem, .. }) => {
-            let trivial_ty = Trivial::Pointer(*elem.clone());
+            let trivial_ty = Trivial::Pointer(Box::leak(elem.to_token_stream().to_string().into_boxed_str()));
 
             Ok((
                 *elem.clone(),
@@ -256,15 +258,16 @@ fn parse_output(
         Type::Tuple(TypeTuple{ ref elems, .. }) => {
             let mut out_ty: Vec<Type> = Vec::new();
             let mut out_ir_ty: Vec<IrType> = Vec::new();
-            let mut out_expr: ExprTuple = parse_quote!(());
+            let mut out_expr: Vec<Expr> = Vec::new();
 
             out_stmts.push(parse_quote!(
-                mut let out_tup = out;
+                let mut out_tup = out;
             ));
 
             for (index, ty) in elems.iter().enumerate() {
+                let index_lit = TokenStream::from_str(&format!("{index}")).or(Err(()))?;
                 out_stmts.push(parse_quote!(
-                    let out = out_tup.#index;
+                    let out = out_tup.#index_lit;
                 ));
 
                 let (ty, ir_ty) = parse_output(
@@ -275,22 +278,22 @@ fn parse_output(
                 )?;
 
                 let this_ident = Ident::new(
-                    &format!("out_{}", index),
+                    &format!("out_tup_{}", index),
                     Span::mixed_site()
                 );
                 out_stmts.push(parse_quote!(
-                    #this_ident = out as #ty;
+                    let #this_ident = out as #ty;
                 ));
 
-                out_expr.elems.push(parse_quote!(#this_ident));
+                out_expr.push(parse_quote!(#this_ident));
 
                 out_ty.push(ty);
                 out_ir_ty.push(ir_ty);
             };
-            out_stmts.push(parse_quote!(
-                let out = #out_expr;
-            ));
 
+            out_stmts.push(parse_quote!(
+                let out = (#(#out_expr),*);
+            ));
             out_stmts.push(parse_quote!(
                 let out = Box::from(out);
             ));
@@ -299,6 +302,7 @@ fn parse_output(
             ));
 
             for (index, this_ty) in out_ty.iter().enumerate() {
+                let index_lit = TokenStream::from_str(&format!("{index}")).or(Err(()))?;
                 let fn_ident = Ident::new(
                     &format!("{}_{}", ident_prefix, index),
                     Span::mixed_site()
@@ -306,7 +310,7 @@ fn parse_output(
                 out_fns.push(parse_quote!(
                     #[no_mangle]
                     extern "C" fn #fn_ident(arg_0: *mut (#(#out_ty),*)) -> #this_ty {
-                        unsafe { (*arg_0).#index }
+                        unsafe { (*arg_0).#index_lit }
                     }
                 ));
             };
@@ -322,7 +326,7 @@ fn parse_output(
             ));
             Ok((
                 parse_quote!((*mut #elem, usize)),
-                IrType::Slice(*elem.clone())
+                IrType::Slice(Box::leak(elem.to_token_stream().to_string().into_boxed_str()))
             ))
         },
 
@@ -401,14 +405,14 @@ fn parse_input(
 
                         Ok((
                             parse_quote!( #ident ),
-                            IrType::Custom(ty.clone())
+                            IrType::Custom(Box::leak(ty.to_token_stream().to_string().into_boxed_str()))
                         ))
                     }
                 }
             }
         },
         Type::Ptr(TypePtr{ ref elem, .. }) => {
-            let ty = Trivial::Pointer(*elem.clone());
+            let ty = Trivial::Pointer(Box::leak(elem.to_token_stream().to_string().into_boxed_str()));
             in_args.push(parse_quote!(#ident: #ty));
 
             Ok((
@@ -477,17 +481,17 @@ fn parse_input(
         Type::Slice(TypeSlice { ref elem, .. }) => {
             let ptr = {
                 if let Type::Path(TypePath{ ref path, ..}) = **elem {
-                    let ident = path.get_ident().ok_or(())?.to_string();
-                    match ident.as_str() {
+                    let this_ident = path.get_ident().ok_or(())?.to_string();
+                    match this_ident.as_str() {
                         "u8" => {
                             Trivial::Buffer
                         },
                         _ => {
-                            Trivial::Pointer(*elem.clone())
+                            Trivial::Pointer(Box::leak(this_ident.into_boxed_str()))
                         }
                     }
                 } else {
-                    Trivial::Pointer(*elem.clone())
+                    Trivial::Pointer(Box::leak(elem.to_token_stream().to_string().into_boxed_str()))
                 }
             };
             in_args.push(parse_quote!(#ident: #ptr));
@@ -501,7 +505,7 @@ fn parse_input(
 
             Ok((
                 parse_quote!( #ident ),
-                IrType::Slice(*elem.clone())
+                IrType::Slice(Box::leak(elem.to_token_stream().to_string().into_boxed_str()))
             ))
         },
 

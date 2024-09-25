@@ -19,7 +19,7 @@ pub enum Trivial {
     F64,
 
     // pointer types
-    Pointer(Type),
+    Pointer(&'static str),
     Buffer,
     // Function, // TODO: unimpeleted types that are supported by the ffi
 
@@ -32,9 +32,9 @@ pub enum RawType {
     Ref(&'static RawType),
     Paren(&'static RawType),
     Tuple(&'static [RawType]),
-    Slice(Type), // [pointer, usize]
+    Slice(&'static str), // [pointer, usize]
     Str, // [pointer, usize]
-    Custom(Type), // [pointer]
+    Custom(&'static str), // [pointer]
 }
 
 impl Default for RawType {

@@ -26,24 +26,16 @@ fn test_str() {
 
 }
 
-fn test_custom() {
+#[deno_bindgen]
+fn test_custom() -> CustomType {
     let x = CustomType {};
-    let out = &x;
-    let out = Box::from(out.to_owned());
-
-    let out: Box<CustomType> = Box::from(out);
-    let out = Box::into_raw(out);
-
+    x
 }
 
-fn test_tup() {
+#[deno_bindgen]
+fn test_tup() -> (usize, i32, i32) {
     let tup = (423, 5235, 2353);
-
-    let mut out_tup = tup;
-    let out = out_tup.0;
-    let out = out as usize;
-    out_tup.0 = out;
-    let out = out_tup;
+    tup
 }
 
 
