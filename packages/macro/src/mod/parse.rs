@@ -60,6 +60,7 @@ fn parse_item(item: Item, macro_args: MacroArgs) -> TokenStream {
                     optional:     macro_args.optional,
                     non_blocking: macro_args.non_blocking,
                     _internal:    false,
+                    _constructor: false,
                 },
             )
         },
