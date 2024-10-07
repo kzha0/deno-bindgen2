@@ -1,16 +1,20 @@
-#[derive(Debug, Clone)]
+
+#[allow(unused)]
+#[derive(Clone, Debug)]
 pub enum RawItem {
     Fn(RawFn),
     Struct(RawStruct),
 }
 
-#[derive(Debug, Clone)]
+#[allow(unused)]
+#[derive(Clone, Debug)]
 pub struct RawStruct {
     pub ident:   &'static str,
     pub methods: &'static [RawFn],
 }
 
-#[derive(Debug, Clone)]
+#[allow(unused)]
+#[derive(Clone, Debug)]
 pub struct RawFn {
     pub ident:        &'static str,
     pub raw_inputs:   &'static [RawType],
@@ -20,14 +24,15 @@ pub struct RawFn {
     pub _constructor: bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[allow(unused)]
+#[derive(Clone, Debug)]
 pub enum RawType {
     Trivial(Trivial),
     Paren(&'static RawType),
     Tuple(&'static [RawType]),
-    Slice(&'static RawType),
-    Str,
-    Custom(&'static str),
+    Slice(&'static RawType),  // [pointer, usize]
+    Str,                  // [pointer, usize]
+    Custom(&'static str), // [pointer]
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
@@ -48,5 +53,8 @@ pub enum Trivial {
     F32,
     F64,
     Pointer(&'static str),
-    Buffer(&'static Trivial),
+    Buffer(Box<Trivial>), // in the future, Deno's FFI API for buffer types may change
+    // Function, // TODO: unimpeleted types that are supported by the ffi
+    // Struct(Box<[Trivial]>),
 }
+

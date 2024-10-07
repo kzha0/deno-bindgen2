@@ -2,11 +2,13 @@
 resolver = "2"
 members = [
     "packages/core",
-    "packages/macro"
+    "packages/macro",
+    "packages/test"
 ]
 
 [workspace.package]
 edition = "2021"
 
 [workspace.dependencies]
-deno-bindgen2_macro = { path = "packages/macro"}
+deno-bindgen2-macro = { path = "packages/macro" }
+deno-bindgen2 = { path = "packages/core" }

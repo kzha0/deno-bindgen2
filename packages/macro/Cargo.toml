@@ -1,5 +1,5 @@
 [package]
-name = "deno-bindgen2_macro"
+name = "deno-bindgen2-macro"
 version = "0.1.0"
 edition.workspace = true
 
