@@ -4,7 +4,7 @@
 
 This project aims to empower TypeScript development by bridging access to Rust's powerful memory-safe ecosystem.
 
-This is a fork of the original `deno_bindgen` project.
+This project is a rewrite of the original `deno_bindgen` project and draws heavily from its soure code.
 
 Currently a work-in-progress.
 
