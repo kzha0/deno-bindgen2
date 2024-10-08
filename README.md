@@ -2,9 +2,9 @@
 
 `deno-bindgen2` is an FFI generator that allows you to write idiomatic Rust code and consume it as an FFI library in Deno. It simplifies and automates FFI bindings generation for Rust to Deno so you don't have to think about it.
 
-This project aims to empower TypeScript development by bridging access to Rust's powerful yet memory-safe system libraries.
+This project aims to empower TypeScript development by bridging access to Rust's powerful memory-safe ecosystem.
 
-This is a fork of the original `deno_bindgen` project and aims to be its successor.
+This is a fork of the original `deno_bindgen` project.
 
 Currently a work-in-progress.
 
