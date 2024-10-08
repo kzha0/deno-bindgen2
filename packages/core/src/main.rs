@@ -20,13 +20,14 @@ pub struct Artifact {
 }
 
 #[derive(Parser, Debug)]
-#[structopt(name = "deno_bindgen_cli", about = "A CLI for deno_bindgen")]
+#[structopt(name = "deno_bindgen2_cli", about = "Generate rust bindings for Deno in TypeScript. Use this CLI tool with the `deno_bindgen2` library crate")]
 struct Opt {
     #[structopt(short, long)]
     /// Build in release mode
     release: bool,
 
     #[structopt(short, long)]
+    /// Path to output file
     out: Option<PathBuf>,
 
     #[structopt(short, long)]
