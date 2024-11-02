@@ -13,7 +13,7 @@ pub struct ItemFn {
     pub ident:   Ident,
     pub inputs:  Vec<Type>,
     pub output:  Type,
-    pub block:   Block,
+    block:   Block,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -48,6 +48,9 @@ impl ItemFn {
             ));
         }
         let unsafe_ = input.parse()?;
+
+        // TODO: should extern functions be restricted?
+
         if input.parse::<Option<Token![extern]>>()?.is_some() {
             if let Some(abi) = input.parse::<Option<LitStr>>()? {
                 let abi_str = abi.value();
@@ -329,28 +332,28 @@ impl ItemFn {
                 | Type::Numeric(_)
                 | Type::Bool
                 | Type::Char
-                | Type::Ptr(_)
-                | Type::BareFn(_) => (),
-                Type::Ref(TypeReference { mut_, elem }) => {
+                | Type::Pointer(_)
+                | Type::FnPointer(_) => (),
+                Type::Reference(TypeReference { mut_, elem }) => {
                     match *mut_ {
                         true => in_stmts.push(quote! { let #ident = unsafe { &mut *#ident }; }),
                         false => in_stmts.push(quote! { let #ident = unsafe { &*#ident }; }),
                     };
-                    *input = Type::Ptr(TypeReference {
+                    *input = Type::Pointer(TypeReference {
                         mut_: *mut_,
                         elem: std::mem::take(elem),
                     });
                 },
                 Type::Box(elem) => {
                     in_stmts.push(quote! { let #ident = unsafe { Box::from_raw(#ident) }; });
-                    *input = Type::Ptr(TypeReference {
+                    *input = Type::Pointer(TypeReference {
                         mut_: true,
                         elem: std::mem::take(elem),
                     });
                 },
                 _ => {
                     in_stmts.push(quote! { let #ident = unsafe { *Box::from_raw(#ident) }; });
-                    *input = Type::Ptr(TypeReference {
+                    *input = Type::Pointer(TypeReference {
                         mut_: true,
                         elem: Box::new(std::mem::take(input)),
                     });
@@ -364,11 +367,11 @@ impl ItemFn {
             | Type::Numeric(_)
             | Type::Bool
             | Type::Char
-            | Type::Ptr(_)
-            | Type::BareFn(_) => None,
-            Type::Ref(TypeReference { mut_, elem }) => {
+            | Type::Pointer(_)
+            | Type::FnPointer(_) => None,
+            Type::Reference(TypeReference { mut_, elem }) => {
                 let mut_ = *mut_;
-                *output = Type::Ptr(TypeReference {
+                *output = Type::Pointer(TypeReference {
                     mut_,
                     elem: std::mem::take(elem),
                 });
@@ -378,14 +381,14 @@ impl ItemFn {
                 })
             },
             Type::Box(elem) => {
-                *output = Type::Ptr(TypeReference {
+                *output = Type::Pointer(TypeReference {
                     mut_: true,
                     elem: std::mem::take(elem),
                 });
                 Some(quote! { Box::into_raw(out) })
             },
             _ => {
-                *output = Type::Ptr(TypeReference {
+                *output = Type::Pointer(TypeReference {
                     mut_: true,
                     elem: Box::new(std::mem::take(output)),
                 });
@@ -413,6 +416,18 @@ impl ToTokens for ItemFn {
             self_ty,
         } = block;
 
+        // omit unit `()` type from shim wrapper's parameters
+        let mut fn_args = Vec::new();
+        let mut call_args = Vec::new();
+        for (i, input) in inputs.iter().enumerate() {
+            if *input == Type::Void {
+                call_args.push(quote! { () });
+            } else {
+                let arg = args.get(i).expect("error: this function's arguments have not been processed. call `to_ffi_safe` on this item");
+                call_args.push(quote! { #arg });
+                fn_args.push(quote! { #arg: #input });
+            }
+        }
 
         let mut call_expr = if let Some(self_ty) = self_ty {
             quote! { #self_ty :: #ident }
@@ -424,11 +439,11 @@ impl ToTokens for ItemFn {
                 if out_stmt.is_some() {
                     panic!("this function has an out stmt but its signature must return void");
                 }
-                call_expr = quote! { #call_expr ( #(#args),* ); };
+                call_expr = quote! { #call_expr ( #(#call_args),* ); };
                 TokenStream::new()
             },
             _ => {
-                call_expr = quote! { let out = #call_expr ( #(#args),* ); };
+                call_expr = quote! { let out = #call_expr ( #(#call_args),* ); };
                 quote! { -> #output }
             },
         };
@@ -440,7 +455,7 @@ impl ToTokens for ItemFn {
 
         tokens.extend(quote! {
             #[unsafe(no_mangle)]
-            #const_ #unsafe_ extern "C" fn #ident ( #(#args: #inputs),*  ) #output {
+            #const_ #unsafe_ extern "C" fn #ident ( #(#fn_args),* ) #output {
                 #(#in_stmts)*
                 #call_expr
                 #out_stmt
@@ -461,13 +476,13 @@ mod print_tests {
 
     #[test]
     fn test_transform() {
-        let mut test_fn = parse_quote!(
-            ItemFn,
-            fn test_fn(arg0: String, arg1: Vec<Box<CustomType>>) -> &str {}
-        );
+        let raw = quote! {
+            fn test_fn(arg0: String, arg1: Vec<Box<CustomType>>, arg2: () ) -> &str {}
+        };
+        println!("{}", raw.to_token_stream().to_string());
 
-        dbg!(&test_fn);
+        let mut test_fn: ItemFn = syn::parse2(raw).unwrap();
         test_fn.to_ffi_safe();
-        dbg!(&test_fn.to_token_stream().to_string());
+        println!("{}", test_fn.to_token_stream().to_string());
     }
 }

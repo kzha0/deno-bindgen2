@@ -119,11 +119,10 @@ impl ItemImpl {
                 content.advance_to(&fork);
                 items.push(item);
             } else {
-                let err = item.unwrap_err();
-                let item = content.call(syn::ImplItem::parse)?;
-                match item {
+                let syn_item = content.call(syn::ImplItem::parse)?;
+                match syn_item {
                     syn::ImplItem::Fn(_) => {
-                        return Err(err);
+                        return Err(item.unwrap_err());
                     },
                     _ => (),
                 };

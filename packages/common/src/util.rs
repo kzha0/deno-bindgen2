@@ -1,15 +1,17 @@
-pub use proc_macro2::{TokenStream, Span};
+pub use proc_macro2::{Span, TokenStream};
 pub use quote::{format_ident, quote, ToTokens};
+pub use syn::ext::IdentExt;
 pub use syn::parse::discouraged::Speculative;
 pub use syn::parse::{Parse, ParseStream};
 pub use syn::spanned::Spanned;
-pub use syn::token::{Bracket, Paren};
+pub use syn::token::{Brace, Bracket, Paren};
 pub use syn::visit_mut::VisitMut;
 pub use syn::{
     braced, bracketed, parenthesized, Attribute, Error, Expr, Ident, Lifetime, LitInt,
     LitStr, Pat, Result, Token, Visibility,
 };
 
+#[allow(unused_imports)]
 pub use crate::{dbg_assert, dbg_quote, parse_quote};
 
 #[macro_export]

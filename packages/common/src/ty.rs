@@ -60,16 +60,16 @@ pub enum Type {
     Char,
 
     /// *const T, *mut T
-    Ptr(TypeReference),
+    Pointer(TypeReference),
 
     /// &T, &mut T
-    Ref(TypeReference),
+    Reference(TypeReference),
 
     /// fn(usize) -> ()
     ///
     /// This is passed as an opaque function pointer. In the future, a utility will
     /// be made that enforces against function signatures
-    BareFn(syn::TypeBareFn),
+    FnPointer(syn::TypeBareFn),
 
     /// Box<T>
     ///
@@ -301,7 +301,7 @@ impl Type {
                 // fail if no `const` or `mut` token was provided
                 return Err(ahead.error());
             };
-            return Ok(Self::Ptr(TypeReference {
+            return Ok(Self::Pointer(TypeReference {
                 mut_,
                 elem: Box::new(Self::parse_with_self_ty(input, self_ty)?),
             }));
@@ -318,7 +318,7 @@ impl Type {
             }
             let mut_ = input.parse::<Option<Token![mut]>>()?.is_some();
 
-            return Ok(Self::Ref(TypeReference {
+            return Ok(Self::Reference(TypeReference {
                 mut_,
                 elem: Box::new(Self::parse_with_self_ty(input, self_ty)?),
             }));
@@ -326,7 +326,7 @@ impl Type {
 
         // FUNCTION POINTERS fn(usize) -> ()
         if input.peek(Token![fn]) || input.peek(Token![unsafe]) || input.peek(Token![extern]) {
-            return Ok(Self::BareFn(input.parse()?));
+            return Ok(Self::FnPointer(input.parse()?));
         }
 
 
@@ -579,19 +579,19 @@ impl ToTokens for TypeNumeric {
 impl ToTokens for Type {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let iter = match self {
+            Type::Void => unreachable!("attempted to print unit `()` type"),
             Type::Numeric(type_numeric) => type_numeric.to_token_stream(),
-            Type::Void => quote! { () },
             Type::Bool => quote! { bool },
             Type::Char => quote! { char },
-            Type::Ptr(TypeReference { mut_, elem }) => match mut_ {
+            Type::Pointer(TypeReference { mut_, elem }) => match mut_ {
                 true => quote! { *mut #elem },
                 false => quote! { *const #elem },
             },
-            Type::Ref(TypeReference { mut_, elem }) => match mut_ {
+            Type::Reference(TypeReference { mut_, elem }) => match mut_ {
                 true => quote! { &mut #elem },
                 false => quote! { &#elem },
             },
-            Type::BareFn(type_bare_fn) => type_bare_fn.to_token_stream(),
+            Type::FnPointer(type_bare_fn) => type_bare_fn.to_token_stream(),
             Type::Box(elem) => quote! { Box<#elem> },
             Type::Str => quote! { str },
             Type::String => quote! { String },
@@ -626,8 +626,16 @@ mod print_tests {
     }
 
     #[test]
-    fn test_primitives() {
+    #[should_panic]
+    fn test_void() {
+        // void type should never be printed
+        // as a parameter, i.e. (arg0: ()) or return type fn(...) -> ()
+        // this is useless and should be omitted
         test_print!(());
+    }
+
+    #[test]
+    fn test_primitives() {
         test_print!(u8);
         test_print!(u16);
         test_print!(u32);
