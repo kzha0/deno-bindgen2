@@ -1,0 +1,30 @@
+[workspace]
+resolver = "2"
+members = [
+    "packages/common",
+    "packages/macro",
+    "packages/utils",
+    "packages/core",
+    "packages/test",
+    "packages/cli",
+]
+
+[workspace.package]
+edition = "2021"
+
+[workspace.dependencies]
+deno-bindgen2-common = { path = "packages/common" }
+deno-bindgen2-macro = { path = "packages/macro" }
+deno-bindgen2-utils = { path = "packages/utils" }
+deno-bindgen2 = { path = "packages/core" }
+
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["full", "extra-traits", "parsing", "visit", "visit-mut"] }
+deno_ast = "0.42.2"
+dprint-plugin-typescript = "0.93.0"
+prettyplease = "^0.2"
+
+clap = { version = "4.5", features = ["derive"] }
+inquire = "0.7.5"
+cargo_metadata = "0.18.1"

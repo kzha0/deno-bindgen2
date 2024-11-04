@@ -1,31 +1,17 @@
-use deno_bindgen2_common::Item;
+use deno_bindgen2_common::Marker;
 use proc_macro::TokenStream;
 
 #[proc_macro_attribute]
 pub fn deno_bindgen(_attr: TokenStream, input: TokenStream) -> TokenStream {
-    let mut out = input.clone();
-
-    let mut item = syn::parse_macro_input!(input as Item);
-    item.to_ffi_safe();
-
-    out.extend(&mut TokenStream::from(quote::ToTokens::into_token_stream(item)).into_iter());
-
-    out
+    Marker::deno_bindgen(input)
 }
 
-// #[proc_macro_attribute]
-// pub fn test_attr(attr: TokenStream, _: TokenStream) -> TokenStream {
-//     let attrs = parse_macro_input!(attr as MacroAttribute);
-//     panic!("{attrs:#?}");
-// }
+#[proc_macro_attribute]
+pub fn non_blocking(_attr: TokenStream, input: TokenStream) -> TokenStream {
+    Marker::non_blocking(input)
+}
 
-// #[derive(Debug)]
-// struct MacroAttribute {
-//     meta: Meta
-// }
-
-// impl Parse for MacroAttribute {
-//     fn parse(input: syn::parse::ParseStream) -> syn::Result<Self> {
-//         Ok(Self { meta: input.parse()? })
-//     }
-// }
+#[proc_macro_attribute]
+pub fn constructor(_attr: TokenStream, input: TokenStream) -> TokenStream {
+    Marker::constructor(input)
+}

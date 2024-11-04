@@ -1,0 +1,15 @@
+[package]
+name = "deno-bindgen2-cli"
+version = "0.1.0"
+edition.workspace = true
+
+[[bin]]
+name = "deno-bindgen2"
+path = "src/main.rs"
+
+[dependencies]
+deno-bindgen2-common = { workspace = true }
+
+clap.workspace = true
+inquire.workspace = true
+cargo_metadata.workspace = true

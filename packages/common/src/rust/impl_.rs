@@ -1,6 +1,5 @@
-
-use crate::fn_::ItemFn;
-use crate::util::*;
+use crate::rust::{Attribute, ItemFn};
+use crate::rust::util::*;
 
 /* -------------------------------------------------------------------------- */
 
@@ -8,7 +7,7 @@ use crate::util::*;
 
 #[derive(Clone, Debug)]
 pub struct ItemImpl {
-    pub attrs:   Vec<Attribute>,
+    pub attr:    Attribute,
     pub unsafe_: Option<Token![unsafe]>,
     pub self_ty: Ident,
     pub items:   Vec<ItemFn>,
@@ -18,19 +17,22 @@ pub struct ItemImpl {
 
 impl Parse for ItemImpl {
     fn parse(input: ParseStream) -> Result<Self> {
-        let attrs = input.call(Attribute::parse_outer)?;
+        let mut attr = Attribute::default();
+        attr.parse_outer(input)?;
         input.parse::<Visibility>()?;
 
         let unsafe_ = input.parse()?;
         input.parse::<Token![impl]>()?;
-        ItemImpl::parse_with_progress(input, attrs, unsafe_)
+        ItemImpl::parse_remaining(input, attr, unsafe_)
     }
 }
 
 impl ItemImpl {
-    pub fn parse_with_progress(
+    /// `parse_with_progress` is used by the `item` parser since it has already
+    /// parsed some attribute or visibility for both item_fn and item_impl
+    pub fn parse_remaining(
         input: ParseStream,
-        mut attrs: Vec<Attribute>,
+        mut attr: Attribute,
         // visibility already parsed
         unsafe_: Option<Token![unsafe]>,
     ) -> Result<Self> {
@@ -44,26 +46,23 @@ impl ItemImpl {
 
         let fork = input.fork();
 
-
-        // is the leadign colon okay if the path is global? this may refer to an item outside the current crate
+        // is the leading colon okay if the path is global? this may refer to an item
+        // outside the current crate
         let leading_colon = fork.parse::<Option<Token![::]>>()?;
         let ident = fork.parse::<Ident>();
         let path_sep = fork.parse::<Option<Token![::]>>()?;
         let lt_token = fork.parse::<Option<Token![<]>>()?;
 
         if let Some(lt_token) = lt_token {
-                // [!ISSUE] implementing types cannot have generic parameters as it leads to
-                // multiple polymorphic implementations of the same type method
-                return Err(Error::new(
-                    lt_token.span(),
-                    "type arguments are not supported",
-                ));
+            // [!ISSUE] implementing types cannot have generic parameters as it leads to
+            // multiple polymorphic implementations of the same type method
+            return Err(Error::new(
+                lt_token.span(),
+                "type arguments are not supported",
+            ));
         }
         if let Some(leading_colon) = leading_colon {
-            return Err(Error::new(
-                leading_colon.span(),
-                "unsupported global path"
-            ));
+            return Err(Error::new(leading_colon.span(), "unsupported global path"));
         }
         if let Some(path_sep) = path_sep {
             return Err(Error::new(
@@ -84,7 +83,7 @@ impl ItemImpl {
                 return Err(Error::new(
                     ty.span(),
                     "unsupported type: only bare identifiers are supported",
-                ))
+                ));
             } else {
                 return Err(ident.unwrap_err());
             }
@@ -106,16 +105,27 @@ impl ItemImpl {
 
         let content;
         braced!(content in input);
-        attrs.append(&mut content.call(Attribute::parse_inner)?);
+        attr.parse_inner(&content)?;
 
         let mut items = Vec::new();
+        let mut constructor = false; // tracks a singleton `constructor` marker
+
         while !content.is_empty() {
-            let attrs = content.call(Attribute::parse_outer)?;
+            let mut attr = Attribute::default();
+            attr.parse_outer(&content)?;
             content.parse::<Visibility>()?;
 
             let fork = content.fork();
-            let item = ItemFn::parse_with_self_ty(&fork, attrs, Some(&self_ty));
+            let item = ItemFn::parse_self_ty(&fork, attr, Some(&self_ty));
             if let Ok(item) = item {
+                if item.attr.has_constructor() {
+                    if !constructor {
+                        constructor = true;
+                    } else {
+                        return Err(Error::new(item.ident.span(), "`constructor` marker used multiple times. only one function can be marked with `constructor`"));
+                    }
+                }
+
                 content.advance_to(&fork);
                 items.push(item);
             } else {
@@ -130,7 +140,7 @@ impl ItemImpl {
         }
 
         Ok(Self {
-            attrs,
+            attr,
             unsafe_,
             self_ty,
             items,
@@ -148,12 +158,10 @@ mod parse_tests {
 
     #[test]
     fn with_attrs_and_vis() {
-        dbg_quote!(ItemImpl,
+        dbg_quote!(
+            ItemImpl,
             #[some_attr]
-            pub impl CustomType {
-
-            }
-
+            pub impl CustomType {}
         );
     }
 
@@ -223,7 +231,8 @@ mod parse_tests {
 
     #[test]
     fn with_nested_attrs_and_vis() {
-        dbg_quote!(ItemImpl,
+        dbg_quote!(
+            ItemImpl,
             #[impl_outer_attr]
             impl CustomType {
                 #![impl_inner_attr]
@@ -261,7 +270,8 @@ mod parse_tests {
 
     #[test]
     fn with_unsafe_self() {
-        dbg_quote!(ItemImpl,
+        dbg_quote!(
+            ItemImpl,
             unsafe impl CustomType {
                 unsafe fn test_fn(self) {}
             }
@@ -281,6 +291,7 @@ mod parse_tests {
     fn with_other_self() {
         dbg_quote!(ItemImpl,
             impl CustomType {
+
                 fn test_fn(arg0: Self) {}
             }
         );
@@ -314,6 +325,31 @@ mod parse_tests {
             }
         );
     }
+
+    #[test]
+    fn with_constructor() {
+        dbg_quote!(ItemImpl,
+            impl CustomType {
+
+                #[constructor]
+                fn test_fn() -> Self {}
+
+            }
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn with_constructor_error() {
+        dbg_quote!(ItemImpl,
+            impl CustomType {
+
+                #[constructor]
+                fn test_fn() -> OtherType {}
+
+            }
+        );
+    }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -321,17 +357,24 @@ mod parse_tests {
 // MARK: print
 
 impl ItemImpl {
-    pub fn to_ffi_safe(&mut self) {
+    pub fn transform(&mut self) {
         for item in &mut self.items {
-            item.to_ffi_safe();
+            item.transform();
         }
     }
 }
 
 impl ToTokens for ItemImpl {
     fn to_tokens(&self, tokens: &mut TokenStream) {
+        let self_ty = &self.self_ty;
         let items = &self.items;
-        tokens.extend(quote! { #(#items)* });
+        tokens.extend(quote! {
+            #(#items)*
+            const _: () = {
+                const fn assert_impl<T: ::deno_bindgen2::DenoBindgen>() {}
+                assert_impl::<#self_ty>();
+            };
+        });
     }
 }
 
@@ -340,6 +383,4 @@ impl ToTokens for ItemImpl {
 // MARK: print tests
 
 #[cfg(test)]
-mod print_tests {
-
-}
+mod print_tests {}

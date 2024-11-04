@@ -8,11 +8,4 @@ proc-macro = true
 path = "lib.rs"
 
 [dependencies]
-deno-bindgen2-common.workspace = true
-quote.workspace = true
-syn.workspace = true
-
-# proc-macro2.workspace = true
-
-# proc-macro-error.workspace = true
-# anyhow.workspace = true
+deno-bindgen2-common = { workspace = true, features = ["macro"] }
