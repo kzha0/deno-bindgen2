@@ -215,16 +215,37 @@ impl Type {
     /// being parsed from within an associated function of an `impl` block
     pub fn parse(input: ParseStream, self_ty: Option<&Ident>) -> Result<Self> {
         // RECEVIER TYPES self &self &mut self
-        if input.peek(Token![self]) {
+
+        // [!TODO] rewrite this receiver parser
+
+        if input.peek(Token![self]) || input.peek2(Token![self]) || input.peek3(Token![self]) {
             if let Some(self_ty) = self_ty {
-                input.parse::<Token![self]>()?;
-                return Ok(Type::UserDefined(self_ty.clone()));
+                if input.peek(Token![mut]) && input.peek2(Token![self]) {
+                    input.parse::<Token![mut]>()?;
+                }
+                if input.peek(Token![self]) {
+                    input.parse::<Token![self]>()?;
+                    return Ok(Type::UserDefined(self_ty.clone()));
+                }
+                if input.peek(Token![&]) && input.peek2(Token![self]) {
+                    input.parse::<Token![&]>()?;
+                    input.parse::<Token![self]>()?;
+                    return Ok(Type::Ref(Box::new(Type::UserDefined(self_ty.clone()))));
+                }
+                if input.peek(Token![&]) && input.peek2(Token![mut]) && input.peek3(Token![self]) {
+                    input.parse::<Token![&]>()?;
+                    input.parse::<Token![mut]>()?;
+                    input.parse::<Token![self]>()?;
+                    return Ok(Type::RefMut(Box::new(Type::UserDefined(self_ty.clone()))));
+                }
             } else {
                 return Err(input.error(
                     "unexpected receiver: `self` parameter may only appear in associated functions of trait or implement blocks"
                 ));
             }
         }
+
+
         if input.peek(Token![Self]) {
             if let Some(self_ty) = self_ty {
                 input.parse::<Token![Self]>()?;

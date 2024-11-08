@@ -211,7 +211,7 @@ impl ToTokens for FfiFunction {
 
         let inputs = quote! { #(#inputs),* };
         let non_blocking = if *non_blocking {
-            quote! { non_blocking: true }
+            quote! { nonblocking: true }
         } else {
             TokenStream::new()
         };

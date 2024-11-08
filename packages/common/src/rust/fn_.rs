@@ -108,20 +108,12 @@ impl ItemFn {
             None
         };
 
-        let has_self_value = content.peek(Token![self]);
-        if has_self_value || content.peek(Token![&]) {
-            if has_self_value && unsafe_.is_none() {
-                // [!ISSUE] is this necessary? or is this verbosity appropriate
-                // since the user is dealing with ffi boundaries
-                let self_ = content.fork().parse::<Token![self]>()?;
-                return Err(Error::new(
-                    self_.span,
-                    format!(
-                        "this method takes ownership of `self`, which is unsafe. mark this function with unsafe: `unsafe fn {}`",
-                        ident.to_string()
-                    )
-                ));
-            }
+        // [!TODO] rewrite this receiver parser
+
+        if content.peek(Token![self])
+        || content.peek(Token![mut]) && content.peek2(Token![self])
+        || content.peek(Token![&]) && content.peek2(Token![self])
+        || content.peek(Token![&]) && content.peek2(Token![mut]) && content.peek3(Token![self]) {
             let ty = Type::parse(&content, self_ty)?;
             assoc = Some(match &ty {
                 Type::Ref(_) => Association::Instance,

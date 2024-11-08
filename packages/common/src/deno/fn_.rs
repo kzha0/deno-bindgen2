@@ -133,16 +133,22 @@ impl TsMethod {
         let mut stmts = TokenStream::new();
 
         let mut ident = quote! { #ident };
-        let fn_output;
 
+        let fn_output;
         let call_expr = match output {
             RustType::Void => {
                 fn_output = TokenStream::new();
                 quote! { symbols.#ffi_ident }
             },
             rest => {
-                fn_output = quote! { : #rest };
-                quote! { const out = symbols.#ffi_ident }
+                if self.attr.has_non_blocking() {
+                    ident = quote! { async #ident };
+                    fn_output = quote! { : Promise<#rest> };
+                    quote! { const out = await symbols.#ffi_ident }
+                } else {
+                    fn_output = quote! { : #rest };
+                    quote! { const out = symbols.#ffi_ident }
+                }
             },
         };
 
