@@ -55,10 +55,7 @@ fn main() -> Result<()> {
     // }
 
     Cargo::precheck();
-    let metadata = Cargo::get_metadata(
-        #[cfg(debug_assertions)]
-        Some("../test"),
-    );
+    let metadata = Cargo::get_metadata();
 
     let file = Cargo::expand(metadata.pkg_name.as_str());
     let file = File::parse_str(file.as_str());
@@ -129,7 +126,7 @@ mod tests {
 
     #[test]
     fn test_parse() {
-        let metadata = Cargo::get_metadata(Some("../test"));
+        let metadata = Cargo::get_metadata();
         let content = Cargo::expand(metadata.pkg_name.as_str());
 
         print!("{content}");

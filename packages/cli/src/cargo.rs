@@ -63,13 +63,8 @@ impl Cargo {
         }
     }
 
-    pub fn get_metadata(#[cfg(debug_assertions)] cwd: Option<&str>) -> MetaData {
-        let mut cmd = MetadataCommand::new();
-
-        #[cfg(debug_assertions)]
-        if let Some(cwd) = cwd {
-            cmd.current_dir(cwd);
-        }
+    pub fn get_metadata() -> MetaData {
+        let cmd = MetadataCommand::new();
 
         let metadata = cmd.exec().expect("failed to execute `cargo metadata`");
         let root_pkg = metadata
@@ -214,20 +209,20 @@ mod tests {
 
     #[test]
     fn test_get_metadata() {
-        let metadata = Cargo::get_metadata(Some("../test"));
+        let metadata = Cargo::get_metadata();
         dbg!(&metadata);
     }
 
     #[test]
     fn test_expand() {
-        let metadata = Cargo::get_metadata(Some("../test"));
+        let metadata = Cargo::get_metadata();
         let content = Cargo::expand(metadata.pkg_name.as_str());
         println!("{content}");
     }
 
     #[test]
     fn test_build() {
-        let metadata = Cargo::get_metadata(Some("../test"));
+        let metadata = Cargo::get_metadata();
         // let dylib_path = Cargo::build(pkg_name, pkg_rel_path, release)
 
         let dylib_path = Cargo::build(&metadata.pkg_name, false, vec![]);
