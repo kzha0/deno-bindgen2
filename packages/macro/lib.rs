@@ -10,8 +10,3 @@ pub fn deno_bindgen(_attr: TokenStream, input: TokenStream) -> TokenStream {
 pub fn non_blocking(_attr: TokenStream, input: TokenStream) -> TokenStream {
     Marker::non_blocking(input)
 }
-
-#[proc_macro_attribute]
-pub fn constructor(_attr: TokenStream, input: TokenStream) -> TokenStream {
-    Marker::constructor(input)
-}

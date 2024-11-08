@@ -1,11 +1,9 @@
-use syn::token::Struct;
-
 use crate::rust::util::*;
 use crate::rust::Attribute;
 
 // MARK: api
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ItemStruct {
     pub attr:  Attribute,
     pub ident: Ident,
@@ -46,6 +44,7 @@ impl ItemStruct {
         let ahead = input.lookahead1();
         if ahead.peek(Paren) {
             syn::FieldsUnnamed::parse(input)?;
+            let ahead = input.lookahead1();
             if ahead.peek(Token![;]) {
                 input.parse::<Token![;]>()?;
             } else {
@@ -60,10 +59,75 @@ impl ItemStruct {
         }
 
         // fields are ignored for now. in the future, they may be supported directly
-        Ok(Self {
-            attr,
-            ident,
-        })
+        Ok(Self { attr, ident })
+    }
+}
+
+/* -------------------------------------------------------------------------- */
+
+// MARK: parse tests
+
+#[cfg(test)]
+mod parse_tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_struct() {
+        dbg_assert!(parse_quote!(ItemStruct, struct CustomType;), ItemStruct {
+            attr:  Attribute::default(),
+            ident: format_ident!("CustomType"),
+        });
+        dbg_assert!(
+            parse_quote!(ItemStruct, struct CustomType(bool);),
+            ItemStruct {
+                attr:  Attribute::default(),
+                ident: format_ident!("CustomType"),
+            }
+        );
+        dbg_assert!(
+            parse_quote!(
+                ItemStruct,
+                struct CustomType {
+                    some_field: bool,
+                }
+            ),
+            ItemStruct {
+                attr:  Attribute::default(),
+                ident: format_ident!("CustomType"),
+            }
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_parse_struct_with_generics() {
+        dbg_assert!(
+            parse_quote!(ItemStruct, struct CustomType<T>(T);),
+            ItemStruct {
+                attr:  Attribute::default(),
+                ident: format_ident!("CustomType"),
+            }
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_parse_struct_with_where_clause() {
+        dbg_assert!(
+            parse_quote!(
+                ItemStruct,
+                struct CustomType
+                where
+                    T: Sized,
+                {
+                    some_field: bool,
+                }
+            ),
+            ItemStruct {
+                attr:  Attribute::default(),
+                ident: format_ident!("CustomType"),
+            }
+        );
     }
 }
 
@@ -76,11 +140,34 @@ impl ToTokens for ItemStruct {
         let self_ty = &self.ident;
         let ident = format_ident!("__{}__drop", self.ident);
         tokens.extend(quote! {
-            impl ::deno_bindgen2::DenoBindgen for #self_ty {}
+            impl deno_bindgen2::DenoBindgen for #self_ty {}
             #[unsafe(no_mangle)]
             extern "C" fn #ident (arg_0: *mut #self_ty) {
-                ::deno_bindgen2::DenoBindgen::drop(arg_0);
+                std::mem::drop(Box::from(arg_0));
             }
         });
+    }
+}
+
+/* -------------------------------------------------------------------------- */
+
+// MARK: print tests
+
+#[cfg(test)]
+mod print_tests {
+    use super::*;
+
+    #[test]
+    fn test_print_struct() {
+        let raw = parse_quote!(
+            ItemStruct,
+            pub struct CustomType {
+                field: bool,
+            }
+        );
+        println!(
+            "{}",
+            crate::prettify!(raw.to_token_stream().to_string().as_str())
+        );
     }
 }

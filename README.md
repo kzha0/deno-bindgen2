@@ -2,9 +2,9 @@
 
 `deno-bindgen2` is an FFI bindings generator that simplifies writing Rust libraries for Deno.
 
-It works by providing a procedural macros that creates wrappers around native Rust functions and make it FFI-safe. This makes writing FFI libraries easier as it deals with boilerplate code generation so you don't have to.
+It works by providing procedural macros that create wrappers around native Rust functions and make it FFI-safe. This makes writing FFI libraries easier as it deals with boilerplate code generation so you don't have to.
 
-It also provides a CLI tool that generates a TypeScript module that tries to follow the Rust version of your library.
+It also provides a CLI tool that generates a TypeScript module and tries to follow the semantics of your code wherever possible.
 
 This project works along with the `deno-bindgen2-utils` library (to be) published on JSR, which contains utilities for interfacing with Rust's data structures in TypeScript.
 
@@ -32,7 +32,7 @@ fn test_1() {
 }
 
 #[deno_bindgen]
-fn test_2(str: &str) -> String {
+fn test_2(string: String) -> String {
     format!("{} to Rust!", str)
 }
 ```
@@ -47,21 +47,33 @@ Next, to generate the bindings and TypeScript code, you must install the CLI too
 cargo install deno_bindgen2
 ```
 
-Then, run this command in your project's package folder (not the workspace folder), preferrably with an argument `--out <path to output file>` to specify the output. Without an  `--out` argument, the TypeScript code will be printed to the console.
+Then, run this command in your project's package folder (not the workspace folder).
 
 ```bash
-deno_bindgen2 --release --out ./lib/mod.ts
+deno_bindgen2 --release
 ```
+
+This will automatically generate a TypeScript module in `<pkg_root>/dist/<your_module>`, along with another module `rust_type.ts` that contains TypeScript representations of Rust types.
 
 Finally, you can write your TypeScript code and import the functions with the same name/identity from the Rust code.
 
 ```ts
 // hello_world.ts
-import { test_1, test_2 } from "../test.ts";
+import { test_1, test_2 } from "./dist/libmy_mod.ts";
+import { RustString } from "./dist/rust_type.ts";
 
 test_1();
 
-console.log(test_2("Hello from Deno"));
+Deno.test("test_string", () => {
+    // create a `RustString` instance from a JavaScript string
+    // by calling the `from()` static method
+    const hello_string = test_2(RustString.from("Hello from Deno"));
+
+    // turn the RustString into a JavaScript string
+    // by calling its `into()` method
+    console.log(hello_string.into());
+})
+
 ```
 
 To run:
@@ -76,3 +88,5 @@ This should output:
 Hello, world!
 Hello from Deno to Rust!
 ```
+
+For additional code generation options, run `deno-bindgen2 --help`

@@ -1,5 +1,5 @@
 use crate::rust::util::*;
-use crate::rust::{Attribute, Type, TypeReference};
+use crate::rust::{Attribute, Type};
 
 /* -------------------------------------------------------------------------- */
 
@@ -8,6 +8,7 @@ use crate::rust::{Attribute, Type, TypeReference};
 #[derive(Clone, Debug)]
 pub struct ItemFn {
     pub attr:    Attribute,
+    pub vis:     Visibility,
     pub const_:  Option<Token![const]>,
     pub unsafe_: Option<Token![unsafe]>,
     pub ident:   Ident,
@@ -20,7 +21,6 @@ pub struct ItemFn {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Association {
     Static,      // T -> T
-    Constructor, // T -> Self with #[constructor]
     Instance,    // &Self -> T
     InstanceMut, // &mut Self -> T
     Destructor,  // Self -> T   requires `unsafe` qualifier
@@ -40,8 +40,8 @@ impl Parse for ItemFn {
     fn parse(input: ParseStream) -> Result<Self> {
         let mut attr = Attribute::default();
         attr.parse_outer(input)?;
-        input.parse::<Visibility>()?;
-        Self::parse_self_ty(input, attr, None)
+        let vis = input.parse()?;
+        Self::parse_self_ty(input, attr, vis, None)
     }
 }
 
@@ -49,6 +49,7 @@ impl ItemFn {
     pub fn parse_self_ty(
         input: ParseStream,
         attr: Attribute,
+        vis: Visibility,
         self_ty: Option<&Ident>,
     ) -> Result<Self> {
         let const_ = input.parse()?;
@@ -74,7 +75,7 @@ impl ItemFn {
             }
         }
         input.parse::<Token![fn]>()?;
-        Self::parse_remaining(input, attr, self_ty, const_, unsafe_)
+        Self::parse_remaining(input, attr, vis, self_ty, const_, unsafe_)
     }
 
     /// `parse_remaining` is used by the `item` parser since it has already
@@ -82,6 +83,7 @@ impl ItemFn {
     pub fn parse_remaining(
         input: ParseStream,
         mut attr: Attribute,
+        vis: Visibility,
         self_ty: Option<&Ident>,
         const_: Option<Token![const]>,
         unsafe_: Option<Token![unsafe]>,
@@ -122,13 +124,8 @@ impl ItemFn {
             }
             let ty = Type::parse(&content, self_ty)?;
             assoc = Some(match &ty {
-                Type::Reference(TypeReference { mut_, .. }) => {
-                    if *mut_ {
-                        Association::InstanceMut
-                    } else {
-                        Association::Instance
-                    }
-                },
+                Type::Ref(_) => Association::Instance,
+                Type::RefMut(_) => Association::InstanceMut,
                 Type::UserDefined(_) => Association::Destructor,
                 _ => unreachable!(
                     "unknown error: parsing of self receiver did not return expected type"
@@ -153,33 +150,13 @@ impl ItemFn {
             content.parse::<Token![,]>()?;
         }
 
-        let mut fork = input.fork();
-        let output = if input.parse::<Option<Token![->]>>()?.is_some() {
-            fork = input.fork();
+        let fork = input.fork();
+        let output = if fork.parse::<Option<Token![->]>>()?.is_some() {
+            input.advance_to(&fork);
             Type::parse(input, self_ty)?
         } else {
             Type::Void
         };
-
-        if let Some(self_ty) = self_ty {
-            if attr.has_constructor() {
-                if !output.is_self_ty(self_ty) {
-                    return Err(fork.error(format!(
-                        "this function is marked `constructor` and should return `Self` or `{}`",
-                        self_ty.to_string()
-                    )));
-                }
-
-                if let Some(assoc_) = &assoc {
-                    match assoc_ {
-                        Association::Static => {
-                            assoc = Some(Association::Constructor);
-                        },
-                        _ => (),
-                    }
-                }
-            }
-        }
 
         if let Some(where_) = input.parse::<Option<Token![where]>>()? {
             return Err(Error::new(
@@ -188,11 +165,8 @@ impl ItemFn {
             ));
         }
 
-        // [!ISSUE] is there a solution to skipping parsing the rest of the contents
-        // of a function?
-        // maybe parse until any bracket character is the last,
-        // meaning it is either followed by an syn::Item, or is the end of the tt?????
-        // but what if the item is enclosed as part of a larger delimiter
+        // [!ISSUE] optimize parsing to skip checking of expressions and function
+        // block's contents
         let content;
         braced!(content in input);
         attr.parse_inner(&content)?;
@@ -205,6 +179,7 @@ impl ItemFn {
 
         Ok(Self {
             attr,
+            vis,
             const_,
             unsafe_,
             ident,
@@ -239,7 +214,6 @@ mod parse_tests {
             ItemFn,
             #[doc = "some documentation"]
             #[doc = "deno_bindgen"]
-            #[constructor]
             pub fn test_fn() {}
         );
     }
@@ -399,31 +373,28 @@ impl ItemFn {
                 | Type::Numeric(_)
                 | Type::Bool
                 | Type::Char
-                | Type::Pointer(_)
-                | Type::FnPointer(_) => (),
-                Type::Reference(TypeReference { mut_, elem }) => {
-                    match *mut_ {
-                        true => in_stmts.push(quote! { let #ident = unsafe { &mut *#ident }; }),
-                        false => in_stmts.push(quote! { let #ident = unsafe { &*#ident }; }),
-                    };
-                    *input = Type::Pointer(TypeReference {
-                        mut_: *mut_,
-                        elem: std::mem::take(elem),
-                    });
+                | Type::Ptr(_)
+                | Type::PtrMut(_)
+                | Type::FnPtr(_) => (),
+                Type::Ref(elem) => {
+                    in_stmts.push(quote! { let #ident = unsafe { &*#ident }; });
+                    *input = Type::Ptr(std::mem::take(elem));
+                },
+                Type::RefMut(elem) => {
+                    in_stmts.push(quote! { let #ident = unsafe { &mut *#ident }; });
+                    *input = Type::PtrMut(std::mem::take(elem));
                 },
                 Type::Box(elem) => {
-                    in_stmts.push(quote! { let #ident = unsafe { Box::from_raw(#ident) }; });
-                    *input = Type::Pointer(TypeReference {
-                        mut_: true,
-                        elem: std::mem::take(elem),
-                    });
+                    in_stmts.push(
+                        quote! { let #ident = unsafe { std::boxed::Box::from_raw(#ident) }; },
+                    );
+                    *input = Type::PtrMut(std::mem::take(elem));
                 },
-                _ => {
-                    in_stmts.push(quote! { let #ident = unsafe { *Box::from_raw(#ident) }; });
-                    *input = Type::Pointer(TypeReference {
-                        mut_: true,
-                        elem: Box::new(std::mem::take(input)),
-                    });
+                rest => {
+                    in_stmts.push(
+                        quote! { let #ident = unsafe { *std::boxed::Box::from_raw(#ident) }; },
+                    );
+                    *rest = Type::PtrMut(Box::new(std::mem::take(rest)));
                 },
             }
             args.push(ident);
@@ -434,32 +405,24 @@ impl ItemFn {
             | Type::Numeric(_)
             | Type::Bool
             | Type::Char
-            | Type::Pointer(_)
-            | Type::FnPointer(_) => None,
-            Type::Reference(TypeReference { mut_, elem }) => {
-                let mut_ = *mut_;
-                *output = Type::Pointer(TypeReference {
-                    mut_,
-                    elem: std::mem::take(elem),
-                });
-                Some(match mut_ {
-                    true => quote! { &raw mut *out },
-                    false => quote! { &raw const *out  },
-                })
+            | Type::Ptr(_)
+            | Type::PtrMut(_)
+            | Type::FnPtr(_) => None,
+            Type::Ref(elem) => {
+                *output = Type::Ptr(std::mem::take(elem));
+                Some(quote! { &raw const *out })
+            },
+            Type::RefMut(elem) => {
+                *output = Type::PtrMut(std::mem::take(elem));
+                Some(quote! { &raw mut *out })
             },
             Type::Box(elem) => {
-                *output = Type::Pointer(TypeReference {
-                    mut_: true,
-                    elem: std::mem::take(elem),
-                });
-                Some(quote! { Box::into_raw(out) })
+                *output = Type::Ptr(std::mem::take(elem));
+                Some(quote! { std::boxed::Box::into_raw(out) })
             },
-            _ => {
-                *output = Type::Pointer(TypeReference {
-                    mut_: true,
-                    elem: Box::new(std::mem::take(output)),
-                });
-                Some(quote! { Box::into_raw(Box::from(out)) })
+            rest => {
+                *rest = Type::Ptr(Box::new(std::mem::take(rest)));
+                Some(quote! { std::boxed::Box::into_raw(std::boxed::Box::from(out)) })
             },
         };
     }
@@ -468,6 +431,7 @@ impl ItemFn {
 impl ToTokens for ItemFn {
     fn to_tokens(&self, tokens: &mut TokenStream) {
         let ItemFn {
+            vis,
             const_,
             unsafe_,
             ident,
@@ -509,13 +473,13 @@ impl ToTokens for ItemFn {
                 call_expr = quote! { #call_expr ( #(#call_args),* ); };
                 TokenStream::new()
             },
-            _ => {
+            rest => {
                 if out_stmt.is_some() {
                     call_expr = quote! { let out = #call_expr ( #(#call_args),* ); };
                 } else {
                     call_expr = quote! { #call_expr ( #(#call_args),* ) };
                 }
-                quote! { -> #output }
+                quote! { -> #rest }
             },
         };
 
@@ -526,7 +490,7 @@ impl ToTokens for ItemFn {
 
         tokens.extend(quote! {
             #[unsafe(no_mangle)]
-            #const_ #unsafe_ extern "C" fn #ident ( #(#fn_args),* ) #output {
+            #vis #const_ #unsafe_ extern "C" fn #ident ( #(#fn_args),* ) #output {
                 #(#in_stmts)*
                 #call_expr
                 #out_stmt
@@ -545,18 +509,9 @@ impl ToTokens for ItemFn {
 mod print_tests {
     use super::*;
 
-    #[macro_export]
-    macro_rules! prettify {
-        ( $input:expr ) => {{
-            let out = syn::parse_file($input).unwrap();
-            prettyplease::unparse(&out)
-        }};
-    }
-
-
     macro_rules! pretty_test {
         ( { $( $source:tt )* }, { $( $expected:tt )* } ) => {
-            println!("[source]\n\n{}", prettify!(stringify!( $( $source )* )));
+            println!("[source]\n\n{}", crate::prettify!(stringify!( $( $source )* )));
 
             let mut expanded = syn::parse2::<ItemFn>(quote::quote!{ $( $source )* })
                 .map_err(|err| panic!("{err:#?}"))
@@ -577,11 +532,17 @@ mod print_tests {
         let raw = quote! {
             fn test_fn(arg0: String, arg1: Vec<Box<CustomType>>, arg2: () ) -> &str {}
         };
-        println!("{}", raw.to_token_stream().to_string());
+        println!(
+            "{}",
+            crate::prettify!(raw.to_token_stream().to_string().as_str())
+        );
 
         let mut test_fn: ItemFn = syn::parse2(raw).unwrap();
         test_fn.transform();
-        println!("{}", test_fn.to_token_stream().to_string());
+        println!(
+            "{}",
+            crate::prettify!(test_fn.to_token_stream().to_string().as_str())
+        );
     }
 
     #[test]

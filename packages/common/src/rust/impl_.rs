@@ -1,5 +1,5 @@
-use crate::rust::{Attribute, ItemFn};
 use crate::rust::util::*;
+use crate::rust::{Attribute, ItemFn};
 
 /* -------------------------------------------------------------------------- */
 
@@ -61,6 +61,7 @@ impl ItemImpl {
                 "type arguments are not supported",
             ));
         }
+
         if let Some(leading_colon) = leading_colon {
             return Err(Error::new(leading_colon.span(), "unsupported global path"));
         }
@@ -108,22 +109,30 @@ impl ItemImpl {
         attr.parse_inner(&content)?;
 
         let mut items = Vec::new();
-        let mut constructor = false; // tracks a singleton `constructor` marker
 
         while !content.is_empty() {
             let mut attr = Attribute::default();
             attr.parse_outer(&content)?;
-            content.parse::<Visibility>()?;
+            let vis = content.parse()?;
 
             let fork = content.fork();
-            let item = ItemFn::parse_self_ty(&fork, attr, Some(&self_ty));
+            let item = ItemFn::parse_self_ty(&fork, attr, vis, Some(&self_ty));
             if let Ok(item) = item {
-                if item.attr.has_constructor() {
-                    if !constructor {
-                        constructor = true;
-                    } else {
-                        return Err(Error::new(item.ident.span(), "`constructor` marker used multiple times. only one function can be marked with `constructor`"));
-                    }
+                let ident_str = item.ident.to_string();
+                match ident_str.as_str() {
+                    "constructor" => {
+                        return Err(Error::new(
+                            item.ident.span(),
+                            "`constructor` is a reserved JavaScript method for classes",
+                        ));
+                    },
+                    "ptr" | "take" => {
+                        return Err(Error::new(
+                            item.ident.span(),
+                            format!("`{}` is a reserved name used by deno-bindgen2", ident_str),
+                        ));
+                    },
+                    _ => (),
                 }
 
                 content.advance_to(&fork);
@@ -325,31 +334,6 @@ mod parse_tests {
             }
         );
     }
-
-    #[test]
-    fn with_constructor() {
-        dbg_quote!(ItemImpl,
-            impl CustomType {
-
-                #[constructor]
-                fn test_fn() -> Self {}
-
-            }
-        );
-    }
-
-    #[test]
-    #[should_panic]
-    fn with_constructor_error() {
-        dbg_quote!(ItemImpl,
-            impl CustomType {
-
-                #[constructor]
-                fn test_fn() -> OtherType {}
-
-            }
-        );
-    }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -371,7 +355,7 @@ impl ToTokens for ItemImpl {
         tokens.extend(quote! {
             #(#items)*
             const _: () = {
-                const fn assert_impl<T: ::deno_bindgen2::DenoBindgen>() {}
+                const fn assert_impl<T: deno_bindgen2::DenoBindgen>() {}
                 assert_impl::<#self_ty>();
             };
         });
@@ -383,4 +367,20 @@ impl ToTokens for ItemImpl {
 // MARK: print tests
 
 #[cfg(test)]
-mod print_tests {}
+mod print_tests {
+    use super::*;
+
+    #[test]
+    fn test_print_impl() {
+        let mut raw = parse_quote!(ItemImpl,
+            impl CustomType {
+                fn new() -> Self {}
+            }
+        );
+        raw.transform();
+        println!(
+            "{}",
+            crate::prettify!(raw.to_token_stream().to_string().as_str())
+        );
+    }
+}

@@ -1,5 +1,5 @@
 use crate::rust::util::*;
-use crate::rust::{Attribute, Item, ItemMod};
+use crate::rust::{Attribute, Item};
 
 /* -------------------------------------------------------------------------- */
 
@@ -15,7 +15,7 @@ impl Parse for File {
     fn parse(input: ParseStream) -> Result<Self> {
         let mut attr = Attribute::default();
         attr.parse_inner(input)?;
-        let items = ItemMod::parse_content(input)?;
+        let items = Item::parse_many(input, true)?;
 
         Ok(Self { attr, items })
     }

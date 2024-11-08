@@ -1,6 +1,16 @@
 pub use deno_bindgen2::*;
 
 #[deno_bindgen]
+fn test_1() {
+    println!("Hello, world!");
+}
+
+#[deno_bindgen]
+fn test_2(string: String) -> String {
+    format!("{} to Rust!", string)
+}
+
+#[deno_bindgen]
 fn test_empty() {}
 
 #[deno_bindgen]
@@ -77,6 +87,7 @@ fn test_vec(arg0: Vec<u8>) -> Vec<u8> {
     arg0
 }
 
+// [!TODO] provide way to supress these kinds of warnings
 #[deno_bindgen]
 fn test_path(arg0: std::string::String) -> std::string::String {
     arg0
@@ -98,11 +109,6 @@ impl CustomType {
 
     fn test_mut_self(&mut self) -> &mut Self {
         self
-    }
-
-    #[constructor]
-    fn test_constructor() -> Self {
-        Self {}
     }
 
     fn test_other_self(&self, _arg1: Self, _arg2: &mut CustomType) -> &Self {

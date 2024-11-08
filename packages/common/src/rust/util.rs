@@ -7,13 +7,12 @@ pub use syn::spanned::Spanned;
 pub use syn::token::{Brace, Bracket, Paren};
 pub use syn::visit_mut::VisitMut;
 pub use syn::{
-    braced, bracketed, parenthesized, Error, Expr, Ident, Lifetime, LitInt, LitStr, Pat,
-    Result, Token, Visibility,
+    braced, bracketed, parenthesized, Error, Expr, Ident, Lifetime, LitInt, LitStr, Pat, Result,
+    Token, Visibility,
 };
 
 #[allow(unused_imports)]
 pub use crate::{dbg_assert, dbg_quote, parse_quote};
-
 #[cfg(feature = "macro")]
 #[allow(unused_imports)]
 pub use crate::{diag_warning, diagnostic};
@@ -28,6 +27,14 @@ macro_rules! parse_quote {
 }
 
 #[macro_export]
+macro_rules! prettify {
+    ( $input:expr ) => {{
+        let out = syn::parse_file($input).unwrap();
+        prettyplease::unparse(&out)
+    }};
+}
+
+#[macro_export]
 macro_rules! dbg_quote {
     ( $($tt:tt)* ) => {
         dbg!( $crate::parse_quote!($($tt)*))
@@ -38,7 +45,7 @@ macro_rules! dbg_quote {
 macro_rules! dbg_assert {
     ( $actual:expr, $expected:expr  ) => {
         dbg!(&$actual);
-        assert_eq!( $actual, $expected )
+        assert_eq!($actual, $expected)
     };
 }
 

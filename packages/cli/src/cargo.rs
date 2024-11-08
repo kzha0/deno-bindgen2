@@ -1,7 +1,8 @@
 use core::panic;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
-use cargo_metadata::MetadataCommand;
+use cargo_metadata::{Message, MetadataCommand};
 
 
 /// LIMITATIONS
@@ -18,7 +19,23 @@ use cargo_metadata::MetadataCommand;
 // for macro expansion result. also propose possible custom preprocessing step
 // before compilation
 
-pub struct Cargo {}
+#[derive(Clone, Debug)]
+pub struct MetaData {
+    pub pkg_name:      String,
+    pub lib_name:      String,
+    pub pkg_path:      PathBuf,
+    pub workspace_dir: PathBuf,
+}
+
+impl MetaData {
+    pub fn strip_workspace_path(&self, path: &PathBuf) -> PathBuf {
+        path.strip_prefix(&self.workspace_dir)
+            .expect("pkg path is not a prefix of workspace root path")
+            .to_path_buf()
+    }
+}
+
+pub struct Cargo;
 
 impl Cargo {
     pub fn precheck() {
@@ -46,7 +63,7 @@ impl Cargo {
         }
     }
 
-    pub fn get_pkg_name(#[cfg(debug_assertions)] cwd: Option<&str>) -> String {
+    pub fn get_metadata(#[cfg(debug_assertions)] cwd: Option<&str>) -> MetaData {
         let mut cmd = MetadataCommand::new();
 
         #[cfg(debug_assertions)]
@@ -58,6 +75,7 @@ impl Cargo {
         let root_pkg = metadata
             .root_package()
             .expect("failed to retrieve root package name");
+
         let dylib_target = root_pkg.targets.iter().find(|target| {
             if let Some(kind) = target.kind.first() {
                 if kind.as_str() == "cdylib" {
@@ -71,16 +89,29 @@ impl Cargo {
             false
         });
 
-        if dylib_target.is_some() {
-            root_pkg.name.clone()
+        let pkg_name;
+        let lib_name;
+
+        if let Some(dylib_target) = dylib_target {
+            pkg_name = root_pkg.name.clone();
+            lib_name = dylib_target.name.clone();
         } else {
             panic!(
                 "no `cdylib` library target found in package `{}`",
                 root_pkg.name
             );
         }
-    }
 
+        let mut pkg_path = PathBuf::from(root_pkg.manifest_path.clone());
+        pkg_path.pop();
+
+        MetaData {
+            pkg_name,
+            lib_name,
+            pkg_path,
+            workspace_dir: PathBuf::from(metadata.workspace_root.clone()),
+        }
+    }
 
     // run unprety=expanded on the source file
     pub fn expand(pkg_name: &str) -> String {
@@ -90,9 +121,8 @@ impl Cargo {
             .arg(pkg_name)
             .arg("--lib")
             .arg("--")
-            // .arg("--cfg") // pass these commands when building
-            // .arg("deno_bindgen")
             .stderr(Stdio::inherit());
+
 
         const UNSTABLE_FLAGS: &[&str] = &["unstable-options", "unpretty=expanded", "no-codegen"];
         for unstable_flag in UNSTABLE_FLAGS {
@@ -107,6 +137,73 @@ impl Cargo {
             String::from_utf8(output.stdout).expect("failed to parse `rustc` expansion output");
         content
     }
+
+    pub fn build(pkg_name: &str, release: bool, mut cfgs: Vec<&str>) -> PathBuf {
+        let mut cmd = Command::new("cargo");
+        cmd.arg("+nightly")
+            .arg("build")
+            .arg("--package")
+            .arg(pkg_name)
+            .arg("--lib")
+            .arg("--message-format=json")
+            .stderr(Stdio::inherit())
+            .stdout(Stdio::piped());
+
+        cfgs.push("deno_bindgen");
+        let cfgs = cfgs.iter().map(|cfg| {
+            format!("--cfg {} ", cfg)
+        }).collect::<String>();
+
+        cmd.env("RUSTFLAGS", cfgs);
+
+        if release {
+            cmd.arg("--release");
+        }
+
+        let output = cmd.output().expect("failed to start `cargo build` process");
+
+        let dylib_path;
+
+        if !output.status.success() {
+            panic!(
+                "failed to execute `cargo`: process exited with {}\nfull command: {:?}",
+                output.status, cmd
+            )
+        } else {
+            let cargo_out = std::io::BufReader::new(output.stdout.as_slice());
+            let mut artifact_paths = Vec::new();
+
+            for msg in Message::parse_stream(cargo_out) {
+                if let Err(err) = msg {
+                    panic!("failed to parse cargo output: {:?}", err);
+                }
+
+                match msg.unwrap() {
+                    Message::CompilerArtifact(artifact) => {
+                        // check to ensure the library is set to type `cdylib`
+                        if artifact.target.kind.contains(&"cdylib".to_string()) {
+                            let path = artifact.filenames[0].to_string();
+                            artifact_paths.push(PathBuf::from(path));
+                        }
+                    },
+                    _ => (),
+                }
+            }
+
+            if let Some(path) = artifact_paths.pop() {
+                #[cfg(target_os = "windows")]
+                let dylib_path = path
+                    .strip_prefix(&cwd)
+                    .expect("path is not a prefix of cwd");
+
+                dylib_path = path;
+            } else {
+                panic!("failed to retrieve cargo build artifacts\nis your library set to the `cdylib` type?")
+            }
+        }
+
+        dylib_path
+    }
 }
 
 #[cfg(test)]
@@ -117,14 +214,28 @@ mod tests {
 
     #[test]
     fn test_get_metadata() {
-        let pkg_name = Cargo::get_pkg_name(Some("../test"));
-        dbg!(pkg_name);
+        let metadata = Cargo::get_metadata(Some("../test"));
+        dbg!(&metadata);
     }
 
     #[test]
     fn test_expand() {
-        let pkg_name = Cargo::get_pkg_name(Some("../test"));
-        let content = Cargo::expand(pkg_name.as_str());
+        let metadata = Cargo::get_metadata(Some("../test"));
+        let content = Cargo::expand(metadata.pkg_name.as_str());
         println!("{content}");
+    }
+
+    #[test]
+    fn test_build() {
+        let metadata = Cargo::get_metadata(Some("../test"));
+        // let dylib_path = Cargo::build(pkg_name, pkg_rel_path, release)
+
+        let dylib_path = Cargo::build(&metadata.pkg_name, false, vec![]);
+        dbg!(&dylib_path);
+        /*
+                successes:
+        ---- cargo::tests::test_build stdout ----
+        [packages/cli/src/cargo.rs:236:9] &dylib_path = "/home/rico/Desktop/deno-bindgen2/target/debug/libdeno_bindgen2_test.so"
+         */
     }
 }

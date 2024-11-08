@@ -1,5 +1,5 @@
-use crate::rust::{Attribute, ItemFn, ItemImpl, ItemMod, ItemStruct};
 use crate::rust::util::*;
+use crate::rust::{Attribute, ItemFn, ItemImpl, ItemMod, ItemStruct};
 
 /* -------------------------------------------------------------------------- */
 
@@ -12,16 +12,21 @@ pub enum Item {
     Mod(ItemMod),
     Struct(ItemStruct),
     // Static(ItemStatic), // [!TODO] support static items and data
-    Unsupported, // unsupported item ignored by the parser
 }
 
 // MARK: parse
 
 impl Parse for Item {
     fn parse(input: ParseStream) -> Result<Self> {
+        Self::parse_remaining(input, false)
+    }
+}
+
+impl Item {
+    fn parse_remaining(input: ParseStream, filtered: bool) -> Result<Self> {
         let mut attr = Attribute::default();
         attr.parse_outer(input)?;
-        input.parse::<Visibility>()?;
+        let vis = input.parse()?;
 
         // https://doc.rust-lang.org/cargo/reference/features.html?highlight=featu#command-line-feature-options
         // control conditional compilation through granular feature flags for downstream
@@ -62,7 +67,7 @@ impl Parse for Item {
             let const_ = const_.unwrap();
             let unsafe_ = unsafe_.unwrap();
             return Ok(Self::Fn(ItemFn::parse_remaining(
-                input, attr, None, const_, unsafe_,
+                input, attr, vis, None, const_, unsafe_,
             )?));
         }
 
@@ -73,34 +78,58 @@ impl Parse for Item {
         if unsafe_.is_ok() && impl_.is_ok() {
             input.advance_to(&fork);
             let unsafe_ = unsafe_.unwrap();
-            return Ok(Self::Impl(ItemImpl::parse_remaining(
-                input, attr, unsafe_,
-            )?));
+            return Ok(Self::Impl(ItemImpl::parse_remaining(input, attr, unsafe_)?));
         }
 
         let fork = input.fork();
-        let struct_ = fork.parse::<Option<Token![struct]>>();
+        let struct_ = fork.parse::<Token![struct]>();
         if struct_.is_ok() {
             input.advance_to(&fork);
             return Ok(Self::Struct(ItemStruct::parse_remaining(input, attr)?));
         }
 
-        if cfg!(feature = "macro") {
-            Err(input.error("failed to parse item: expected `fn`, `impl`"))
-        } else {
+        if cfg!(not(feature = "macro")) {
             let fork = input.fork();
             let unsafe_ = fork.parse::<Option<Token![unsafe]>>();
             let mod_ = fork.parse::<Token![mod]>();
             if unsafe_.is_ok() && mod_.is_ok() {
                 input.advance_to(&fork);
-                Ok(Self::Mod(ItemMod::parse_remaining(input, attr)?))
-            } else {
-                // unsupported item
-                input.call(syn::Item::parse)?;
-                Ok(Self::Unsupported)
+                return Ok(Self::Mod(ItemMod::parse_remaining(input, attr, filtered)?));
             }
         }
 
+        Err(input.error("failed to parse item: expected `fn`, `impl`"))
+    }
+
+    pub fn parse_many(input: ParseStream, filtered: bool) -> Result<Vec<Self>> {
+        let mut items = Vec::new();
+
+        while !input.is_empty() {
+            // `filtered` is used by the mod parser which comes back to this function
+            let fork = input.fork();
+            if let Ok(item) = Item::parse_remaining(&fork, filtered) {
+                input.advance_to(&fork);
+                if filtered {
+                    // filter only `deno_bindgen` items
+                    match &item {
+                        Item::Fn(ItemFn { attr, .. })
+                        | Item::Impl(ItemImpl { attr, .. })
+                        | Item::Struct(ItemStruct { attr, .. }) => {
+                            if attr.has_deno_bindgen() {
+                                items.push(item)
+                            }
+                        },
+                        Item::Mod(_) => items.push(item),
+                    }
+                } else {
+                    items.push(item);
+                }
+            } else {
+                input.call(syn::Item::parse)?;
+            }
+        }
+
+        Ok(items)
     }
 }
 
@@ -153,6 +182,11 @@ mod parse_tests {
     }
 
     #[test]
+    fn test_struct() {
+        dbg_quote!(Item, struct CustomType;);
+    }
+
+    #[test]
     #[should_panic]
     #[cfg(feature = "macro")]
     fn test_unsupported() {
@@ -161,7 +195,8 @@ mod parse_tests {
 
     #[test]
     fn test_full() {
-        dbg_quote!(Item,
+        dbg_quote!(
+            Item,
             #[this_mod]
             mod my_mod {
                 #[doc = "deno_bindgen"]
@@ -170,7 +205,10 @@ mod parse_tests {
 
                 fn ignored_function() {}
 
+                #[doc = "deno_bindgen"]
                 struct CustomType {}
+
+                struct IgnoredStruct {}
 
                 #[doc = "deno_bindgen"]
                 impl CustomType {

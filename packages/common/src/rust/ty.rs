@@ -28,18 +28,16 @@ pub enum Type {
 
     /*------------------ PRIMITIVE TYPES ------------------*/
 
-    /// Explit unit return type ()
+    /// Explit unit return type `()`
     #[default]
     Void,
 
     // These are trivial types that don't need to be decomposed
     // and are FFI-safe
 
-    /// Numeric types
-    /// u8..u64, i8..i64, usize, isize, f32/f64
+    /// Numeric types such as
+    /// `u8`..`u64`, `i8`..`i64`, `usize`, `isize`, `f32`/`f64`
     Numeric(TypeNumeric),
-
-
 
     /*------------------ BUILT-IN TYPES ------------------*/
 
@@ -54,24 +52,31 @@ pub enum Type {
     /// `1111 1111`?)
     Bool,
 
-    /// The `char` type has the structure of a u32, but Rust enforces a check
+    /// The `char` type has the structure of a `u32`, but Rust enforces a check
     /// for this type to be a valid unicode scalar value. Some character
     /// decoding may be necessary between language contexts
     Char,
 
-    /// *const T, *mut T
-    Pointer(TypeReference),
-
-    /// &T, &mut T
-    Reference(TypeReference),
-
-    /// fn(usize) -> ()
+    /// `fn(usize) -> ()`
     ///
     /// This is passed as an opaque function pointer. In the future, a utility will
     /// be made that enforces against function signatures
-    FnPointer(syn::TypeBareFn),
+    FnPtr(syn::TypeBareFn),
 
-    /// Box<T>
+    /// `*const T`
+    Ptr(Box<Type>),
+
+    /// `*mut T`
+    PtrMut(Box<Type>),
+
+    /// `&T`
+    Ref(Box<Type>),
+
+    /// `&mut T`
+    RefMut(Box<Type>),
+
+
+    /// `Box<T>`
     ///
     /// Box is just a smart pointer
     Box(Box<Type>),
@@ -89,29 +94,26 @@ pub enum Type {
     /// contexts, use the `String` type
     Str,
 
-    /// String
+    /// `String`
     String,
 
-    /// [T]
+    /// `[T]`
     Slice(Box<Type>),
 
-    /// Fixed size Array [T; n]
+    /// Fixed size array `[T; n]`
     Array(TypeArray),
 
-    /// Vec<T>
+    /// `Vec<T>`
     Vec(Box<Type>),
 
-
-    /// CustomType
-    ///
     /// User-defined types should have some enforcement of being only defined
     /// locally to the crate it is used in
     ///
-    /// Require used to annotate structs that define the type to implement some
+    /// Requires users to annotate structs that define the type to implement some
     /// trait checking mechanism
     UserDefined(Ident),
 
-    /// A tuple type (A, B, C)
+    /// A tuple type `(A, B, C)`
     ///
     /// Tuples should be avoided as each tuple type is interpreted as a unique
     /// tuple identity.
@@ -171,7 +173,7 @@ pub enum Type {
 
     /// A type currently unsupported or unrecognized by the FFI implementation,
     /// or has no orthogonal representation in the target language. It is simply
-    /// stored on the memory as an opaque pointer value, without an interaction
+    /// represented as an opaque pointer value, without any interaction
     /// mechanism in the target language context
     Unsupported(syn::Type),
 }
@@ -195,17 +197,10 @@ pub enum TypeNumeric {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct TypeReference {
-    pub mut_: bool,
-    pub elem: Box<Type>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
 pub struct TypeArray {
     pub elem: Box<Type>,
     pub len:  usize,
 }
-
 
 /* ---------------------------------------------------------------------------- */
 
@@ -320,20 +315,16 @@ impl Type {
         if input.peek(Token![*]) {
             input.parse::<Token![*]>()?;
             let ahead = input.lookahead1();
-            let mut_ = if ahead.peek(Token![const]) {
+            if ahead.peek(Token![const]) {
                 input.parse::<Token![const]>()?;
-                false
+                return Ok(Self::Ptr(Box::new(Self::parse(input, self_ty)?)));
             } else if ahead.peek(Token![mut]) {
                 input.parse::<Token![mut]>()?;
-                true
+                return Ok(Self::PtrMut(Box::new(Self::parse(input, self_ty)?)));
             } else {
                 // fail if no `const` or `mut` token was provided
                 return Err(ahead.error());
             };
-            return Ok(Self::Pointer(TypeReference {
-                mut_,
-                elem: Box::new(Self::parse(input, self_ty)?),
-            }));
         }
 
         // REFERENCE TYPES &mut
@@ -345,17 +336,16 @@ impl Type {
                     "generic parameters and lifetimes are not supported",
                 ));
             }
-            let mut_ = input.parse::<Option<Token![mut]>>()?.is_some();
-
-            return Ok(Self::Reference(TypeReference {
-                mut_,
-                elem: Box::new(Self::parse(input, self_ty)?),
-            }));
+            if input.parse::<Option<Token![mut]>>()?.is_some() {
+                return Ok(Self::RefMut(Box::new(Self::parse(input, self_ty)?)));
+            } else {
+                return Ok(Self::Ref(Box::new(Self::parse(input, self_ty)?)));
+            }
         }
 
         // FUNCTION POINTERS fn(usize) -> ()
         if input.peek(Token![fn]) || input.peek(Token![unsafe]) || input.peek(Token![extern]) {
-            return Ok(Self::FnPointer(input.parse()?));
+            return Ok(Self::FnPtr(input.parse()?));
         }
 
 
@@ -403,6 +393,12 @@ impl Type {
 
 
         let mut ty: syn::Type = input.parse()?;
+
+
+        // [!TODO] support for path types
+        // transform a path like std::fs::File or ::my_crate::myMod
+        // to std__fs__File or __my_crate__myMod
+        // convert double colon `::` to double underscore `__`
 
         #[cfg(feature = "macro")]
         {
@@ -524,6 +520,7 @@ impl<'a> TransformSelfType<'a> {
 // MARK: parse tests
 
 #[cfg(test)]
+#[rustfmt::skip]
 mod parse_tests {
     use super::*;
 
@@ -543,11 +540,21 @@ mod parse_tests {
     }
 
     #[test]
+    /// tests the syn ast mut visitor to transform any `Self` type into the
+    /// provided type ident
     fn test_self_transformer() {
         let mut ty: syn::Type = syn::parse_quote!( HashMap<Self, Vec<Box<Self>>>);
-        println!("from {}", ty.to_token_stream().to_string());
+        println!(
+            "from: {}",
+            ty.to_token_stream().to_string().replace(" ", "")
+        );
+
         TransformSelfType::transform(&mut ty, &format_ident!("CustomType"));
-        println!("to {}", ty.to_token_stream().to_string());
+        println!(
+            "into: {}",
+            ty.to_token_stream().to_string().replace(" ", "")
+        );
+
         assert_eq!(
             ty,
             syn::parse_quote!( HashMap<CustomType, Vec<Box<CustomType>>> )
@@ -555,171 +562,22 @@ mod parse_tests {
     }
 
     #[test]
-    #[rustfmt::skip]
-    fn test_numerics() {
-        dbg_assert!(Type::Numeric(TypeNumeric::U8),    parse_quote!(Type, u8));
-        dbg_assert!(Type::Numeric(TypeNumeric::U16),   parse_quote!(Type, u16));
-        dbg_assert!(Type::Numeric(TypeNumeric::U32),   parse_quote!(Type, u32));
-        dbg_assert!(Type::Numeric(TypeNumeric::U64),   parse_quote!(Type, u64));
-        dbg_assert!(Type::Numeric(TypeNumeric::Usize), parse_quote!(Type, usize));
-        dbg_assert!(Type::Numeric(TypeNumeric::I8),    parse_quote!(Type, i8));
-        dbg_assert!(Type::Numeric(TypeNumeric::I16),   parse_quote!(Type, i16));
-        dbg_assert!(Type::Numeric(TypeNumeric::I32),   parse_quote!(Type, i32));
-        dbg_assert!(Type::Numeric(TypeNumeric::I64),   parse_quote!(Type, i64));
-        dbg_assert!(Type::Numeric(TypeNumeric::Isize), parse_quote!(Type, isize));
-        dbg_assert!(Type::Numeric(TypeNumeric::F32),   parse_quote!(Type, f32));
-        dbg_assert!(Type::Numeric(TypeNumeric::F64),   parse_quote!(Type, f64));
-    }
-
-    // exhaustively checks parsing of supported types
-    #[test]
-    fn test_primitives() {
-        dbg_assert!(Type::Void, parse_quote!(Type, ()));
-        dbg_assert!(Type::Bool, parse_quote!(Type, bool));
-        dbg_assert!(Type::Char, parse_quote!(Type, char));
-    }
-
-    #[test]
-    fn test_pointers() {
-        dbg_assert!(
-            Type::Pointer(TypeReference {
-                mut_: false,
-                elem: Box::new(Type::Numeric(TypeNumeric::U8)),
-            }),
-            parse_quote!(Type, *const u8)
-        );
-        dbg_assert!(
-            Type::Pointer(TypeReference {
-                mut_: true,
-                elem: Box::new(Type::Numeric(TypeNumeric::U8)),
-            }),
-            parse_quote!(Type, *mut u8)
-        );
-        dbg_assert!(
-            Type::Reference(TypeReference {
-                mut_: false,
-                elem: Box::new(Type::Numeric(TypeNumeric::U8)),
-            }),
-            parse_quote!(Type, &u8)
-        );
-        dbg_assert!(
-            Type::Reference(TypeReference {
-                mut_: true,
-                elem: Box::new(Type::Numeric(TypeNumeric::U8)),
-            }),
-            parse_quote!(Type, &mut u8)
-        );
-        dbg_assert!(
-            Type::FnPointer({
-                let ty: syn::Type = syn::parse_quote!(fn(u8) -> u8);
-                match ty {
-                    syn::Type::BareFn(type_bare_fn) => type_bare_fn,
-                    _ => panic!("unexpected error while parsing type"),
-                }
-            }),
-            parse_quote!(Type, fn(u8) -> u8)
-        );
-        dbg_assert!(
-            Type::Box(Box::new(Type::Numeric(TypeNumeric::U8))),
-            parse_quote!(Type, Box<u8>)
-        );
-    }
-
-    #[test]
-    fn test_collections() {
-        dbg_assert!(Type::Str, parse_quote!(Type, str));
-        dbg_assert!(
-            Type::Reference(TypeReference {
-                mut_: true,
-                elem: Box::new(Type::Str),
-            }),
-            parse_quote!(Type, &mut str)
-        );
-        dbg_assert!(Type::String, parse_quote!(Type, String));
-        dbg_assert!(
-            Type::Slice(Box::new(Type::Numeric(TypeNumeric::U8))),
-            parse_quote!(Type, [u8])
-        );
-        dbg_assert!(
-            Type::Reference(TypeReference {
-                mut_: true,
-                elem: Box::new(Type::Slice(Box::new(Type::Numeric(TypeNumeric::U8)))),
-            }),
-            parse_quote!(Type, &mut [u8])
-        );
-        dbg_assert!(
-            Type::Array(TypeArray {
-                elem: Box::new(Type::Numeric(TypeNumeric::U8)),
-                len:  8,
-            }),
-            parse_quote!(Type, [u8; 8])
-        );
-        dbg_assert!(
-            Type::Vec(Box::new(Type::Box(Box::new(Type::Numeric(
-                TypeNumeric::U8
-            ))))),
-            parse_quote!(Type, Vec<Box<u8>>)
-        );
-    }
-
-    #[test]
-    fn test_tuple() {
-        dbg_assert!(
-            Type::Tuple(vec![Type::Numeric(TypeNumeric::U8), Type::String,]),
-            parse_quote!(Type, (u8, String))
-        );
-        dbg_assert!(
-            Type::Tuple(vec![
-                Type::Numeric(TypeNumeric::U8),
-                Type::Box(Box::new(Type::Tuple(vec![
-                    Type::Numeric(TypeNumeric::Usize),
-                    Type::Numeric(TypeNumeric::U8)
-                ]))),
-                Type::String,
-                Type::Reference(TypeReference {
-                    mut_: true,
-                    elem: Box::new(Type::Numeric(TypeNumeric::U8)),
-                })
-            ]),
-            parse_quote!(Type, (u8, Box<(usize, u8)>, String, &mut u8))
-        );
-    }
-
-    #[test]
-    fn test_user_defined() {
-        dbg_assert!(
-            Type::UserDefined(format_ident!("SomeOtherType")),
-            parse_quote!(Type, SomeOtherType)
-        );
-        dbg_assert!(
-            Type::UserDefined(format_ident!("SomeOtherType")),
-            parse_quote!(Type, "CustomType", SomeOtherType)
-        );
-    }
-
-    #[test]
     fn test_self_receivers() {
         dbg_assert!(
-            Type::UserDefined(format_ident!("CustomType")),
-            parse_quote!(Type, "CustomType", CustomType)
+            parse_quote!(Type, "CustomType", CustomType),
+            Type::UserDefined(format_ident!("CustomType"))
         );
         dbg_assert!(
-            Type::UserDefined(format_ident!("CustomType")),
-            parse_quote!(Type, "CustomType", Self)
+            parse_quote!(Type, "CustomType", Self),
+            Type::UserDefined(format_ident!("CustomType"))
         );
         dbg_assert!(
-            Type::Reference(TypeReference {
-                mut_: false,
-                elem: Box::new(Type::UserDefined(format_ident!("CustomType"))),
-            }),
-            parse_quote!(Type, "CustomType", &Self)
+            parse_quote!(Type, "CustomType", &Self),
+            Type::Ref(Box::new(Type::UserDefined(format_ident!("CustomType"))))
         );
         dbg_assert!(
-            Type::Reference(TypeReference {
-                mut_: true,
-                elem: Box::new(Type::UserDefined(format_ident!("CustomType"))),
-            }),
-            parse_quote!(Type, "CustomType", &mut Self)
+            parse_quote!(Type, "CustomType", &mut Self),
+            Type::Ref(Box::new(Type::UserDefined(format_ident!("CustomType"))))
         );
     }
 
@@ -730,10 +588,132 @@ mod parse_tests {
     }
 
     #[test]
+    fn test_user_defined() {
+        dbg_assert!(
+            parse_quote!(Type, SomeOtherType),
+            Type::UserDefined(format_ident!("SomeOtherType"))
+        );
+        dbg_assert!(
+            parse_quote!(Type, "CustomType", SomeOtherType),
+            Type::UserDefined(format_ident!("SomeOtherType"))
+        );
+    }
+
+    #[test]
+    #[rustfmt::skip]
+    fn test_numerics() {
+        dbg_assert!(parse_quote!(Type, u8   ), Type::Numeric(TypeNumeric::U8   ));
+        dbg_assert!(parse_quote!(Type, u16  ), Type::Numeric(TypeNumeric::U16  ));
+        dbg_assert!(parse_quote!(Type, u32  ), Type::Numeric(TypeNumeric::U32  ));
+        dbg_assert!(parse_quote!(Type, u64  ), Type::Numeric(TypeNumeric::U64  ));
+        dbg_assert!(parse_quote!(Type, usize), Type::Numeric(TypeNumeric::Usize));
+        dbg_assert!(parse_quote!(Type, i8   ), Type::Numeric(TypeNumeric::I8   ));
+        dbg_assert!(parse_quote!(Type, i16  ), Type::Numeric(TypeNumeric::I16  ));
+        dbg_assert!(parse_quote!(Type, i32  ), Type::Numeric(TypeNumeric::I32  ));
+        dbg_assert!(parse_quote!(Type, i64  ), Type::Numeric(TypeNumeric::I64  ));
+        dbg_assert!(parse_quote!(Type, isize), Type::Numeric(TypeNumeric::Isize));
+        dbg_assert!(parse_quote!(Type, f32  ), Type::Numeric(TypeNumeric::F32  ));
+        dbg_assert!(parse_quote!(Type, f64  ), Type::Numeric(TypeNumeric::F64  ));
+    }
+
+    // exhaustively checks parsing of supported types
+    #[test]
+    fn test_primitives() {
+        dbg_assert!(parse_quote!(Type, ()), Type::Void);
+        dbg_assert!(parse_quote!(Type, bool), Type::Bool);
+        dbg_assert!(parse_quote!(Type, char), Type::Char);
+    }
+
+    #[test]
+    fn test_pointers() {
+        dbg_assert!(
+            parse_quote!(Type, *const u8),
+            Type::Ptr(Box::new(Type::Numeric(TypeNumeric::U8)))
+        );
+        dbg_assert!(
+            parse_quote!(Type, *mut u8),
+            Type::Ptr(Box::new(Type::Numeric(TypeNumeric::U8)),)
+        );
+        dbg_assert!(
+            parse_quote!(Type, &u8),
+            Type::Ref(Box::new(Type::Numeric(TypeNumeric::U8)))
+        );
+        dbg_assert!(
+            parse_quote!(Type, &mut u8),
+            Type::Ref(Box::new(Type::Numeric(TypeNumeric::U8)))
+        );
+        dbg_assert!(
+            parse_quote!(Type, fn(u8) -> u8),
+            Type::FnPtr({
+                let ty: syn::Type = syn::parse_quote!(fn(u8) -> u8);
+                match ty {
+                    syn::Type::BareFn(type_bare_fn) => type_bare_fn,
+                    _ => panic!("unexpected error while parsing type"),
+                }
+            })
+        );
+        dbg_assert!(
+            parse_quote!(Type, Box<u8>),
+            Type::Box(Box::new(Type::Numeric(TypeNumeric::U8)))
+        );
+    }
+
+    #[test]
+    fn test_collections() {
+        dbg_assert!(parse_quote!(Type, str), Type::Str);
+        dbg_assert!(
+            parse_quote!(Type, &mut str),
+            Type::Ref(Box::new(Type::Str))
+        );
+        dbg_assert!(parse_quote!(Type, String), Type::String);
+        dbg_assert!(
+            parse_quote!(Type, [u8]),
+            Type::Slice(Box::new(Type::Numeric(TypeNumeric::U8)))
+        );
+        dbg_assert!(
+            parse_quote!(Type, &mut [u8]),
+            Type::Ref(Box::new(Type::Slice(Box::new(Type::Numeric(TypeNumeric::U8)))))
+        );
+        dbg_assert!(
+            parse_quote!(Type, [u8; 8]),
+            Type::Array(TypeArray {
+                elem: Box::new(Type::Numeric(TypeNumeric::U8)),
+                len:  8,
+            })
+        );
+        dbg_assert!(
+            parse_quote!(Type, Vec<Box<u8>>),
+            Type::Vec(Box::new(Type::Box(Box::new(Type::Numeric(
+                TypeNumeric::U8
+            )))))
+        );
+    }
+
+    #[test]
+    fn test_tuple() {
+        dbg_assert!(
+            parse_quote!(Type, (u8, String)),
+            Type::Tuple(vec![Type::Numeric(TypeNumeric::U8), Type::String,])
+        );
+        dbg_assert!(
+            parse_quote!(Type, (u8, Box<(usize, u8)>, String, &mut u8)),
+            Type::Tuple(vec![
+                Type::Numeric(TypeNumeric::U8),
+                Type::Box(Box::new(Type::Tuple(vec![
+                    Type::Numeric(TypeNumeric::Usize),
+                    Type::Numeric(TypeNumeric::U8)
+                ]))),
+                Type::String,
+                Type::Ref(Box::new(Type::Numeric(TypeNumeric::U8)))
+            ])
+        );
+    }
+
+    #[test]
     fn test_unsupported_path() {
         dbg_assert!(
-            Type::Unsupported(syn::parse_quote!(std::io::File)),
-            parse_quote!(Type, std::io::File)
+            parse_quote!(Type, std::io::File),
+            Type::Unsupported(syn::parse_quote!(std::io::File))
         );
     }
 }
@@ -745,56 +725,48 @@ mod parse_tests {
 #[rustfmt::skip]
 impl ToTokens for TypeNumeric {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let iter = match self {
-            TypeNumeric::U8    => quote! { u8 },
-            TypeNumeric::U16   => quote! { u16 },
-            TypeNumeric::U32   => quote! { u32 },
-            TypeNumeric::U64   => quote! { u64 },
-            TypeNumeric::Usize => quote! { usize },
-            TypeNumeric::I8    => quote! { i8 },
-            TypeNumeric::I16   => quote! { i16 },
-            TypeNumeric::I32   => quote! { i32 },
-            TypeNumeric::I64   => quote! { i64 },
-            TypeNumeric::Isize => quote! { isize },
-            TypeNumeric::F32   => quote! { f32 },
-            TypeNumeric::F64   => quote! { f64 },
-        };
-
-        tokens.extend(iter);
+        tokens.extend(match self {
+            TypeNumeric::U8    => quote! { std::primitive::u8 },
+            TypeNumeric::U16   => quote! { std::primitive::u16 },
+            TypeNumeric::U32   => quote! { std::primitive::u32 },
+            TypeNumeric::U64   => quote! { std::primitive::u64 },
+            TypeNumeric::Usize => quote! { std::primitive::usize },
+            TypeNumeric::I8    => quote! { std::primitive::i8 },
+            TypeNumeric::I16   => quote! { std::primitive::i16 },
+            TypeNumeric::I32   => quote! { std::primitive::i32 },
+            TypeNumeric::I64   => quote! { std::primitive::i64 },
+            TypeNumeric::Isize => quote! { std::primitive::isize },
+            TypeNumeric::F32   => quote! { std::primitive::f32 },
+            TypeNumeric::F64   => quote! { std::primitive::f64 },
+        });
     }
 }
 
 impl ToTokens for Type {
     fn to_tokens(&self, tokens: &mut TokenStream) {
-        let iter = match self {
+        tokens.extend(match self {
             Type::Void => unreachable!("attempted to print unit `()` type"),
             Type::Numeric(type_numeric) => type_numeric.to_token_stream(),
-            Type::Bool => quote! { bool },
-            Type::Char => quote! { char },
-            Type::Pointer(TypeReference { mut_, elem }) => match mut_ {
-                true => quote! { *mut #elem },
-                false => quote! { *const #elem },
-            },
-            Type::Reference(TypeReference { mut_, elem }) => match mut_ {
-                true => quote! { &mut #elem },
-                false => quote! { &#elem },
-            },
-            Type::FnPointer(type_bare_fn) => type_bare_fn.to_token_stream(),
-            Type::Box(elem) => quote! { Box<#elem> },
-            Type::Str => quote! { str },
-            Type::String => quote! { String },
+            Type::Bool => quote! { std::primitive::bool },
+            Type::Char => quote! { std::primitive::char },
+            Type::FnPtr(type_bare_fn) => type_bare_fn.to_token_stream(),
+            Type::Ptr(elem) => quote! { *const #elem },
+            Type::PtrMut(elem) => quote! { *mut #elem },
+            Type::Ref(elem) => quote! { &#elem },
+            Type::RefMut(elem) => quote! { &mut #elem },
+            Type::Box(elem) => quote! { std::boxed::Box<#elem> },
+            Type::Str => quote! { std::primitive::str },
+            Type::String => quote! { std::string::String },
             Type::Slice(elem) => quote! { [#elem] },
             Type::Array(TypeArray { elem, len }) => {
                 let len = LitInt::new(len.to_string().as_str(), Span::mixed_site());
                 quote! { [#elem; #len] }
             },
-            Type::Vec(elem) => quote! { Vec<#elem> },
+            Type::Vec(elem) => quote! { std::vec::Vec<#elem> },
             Type::UserDefined(ident) => ident.to_token_stream(),
             Type::Tuple(elems) => quote! { ( #(#elems),* ) },
             Type::Unsupported(ty) => ty.to_token_stream(),
-        };
-
-        tokens.extend(iter);
+        });
     }
 }
 
@@ -808,8 +780,19 @@ mod print_tests {
     use super::*;
 
     macro_rules! test_print {
-        ( $($tt:tt)* ) => {
-            dbg_assert!(parse_quote!(Type, $($tt)*).to_token_stream().to_string(), stringify!($($tt)*))
+        ( { $( $source:tt )* }, { $( $expected:tt )* } ) => {
+            let ty = parse_quote!(Type, $($source)* )
+                .to_token_stream()
+                .to_string()
+                .replace(" ", "");
+
+            dbg!(&ty);
+
+            let expected = stringify!( $($expected)* )
+                .replace(" ", "")
+                .replace("\n", "");
+
+            assert_eq!(ty, expected);
         };
     }
 
@@ -819,71 +802,54 @@ mod print_tests {
         // void type should never be printed
         // as a parameter, i.e. (arg0: ()) or return type fn(...) -> ()
         // this is useless and should be omitted
-        test_print!(());
+        parse_quote!(Type, ()).to_token_stream();
     }
 
     #[test]
     fn test_primitives() {
-        test_print!(u8);
-        test_print!(u16);
-        test_print!(u32);
-        test_print!(u64);
-        test_print!(usize);
-        test_print!(i8);
-        test_print!(i16);
-        test_print!(i32);
-        test_print!(i64);
-        test_print!(isize);
-        test_print!(f32);
-        test_print!(f64);
-        test_print!(bool);
-        test_print!(char);
+        test_print!({ u8    }, { std::primitive::u8    });
+        test_print!({ u16   }, { std::primitive::u16   });
+        test_print!({ u32   }, { std::primitive::u32   });
+        test_print!({ u64   }, { std::primitive::u64   });
+        test_print!({ usize }, { std::primitive::usize });
+        test_print!({ i8    }, { std::primitive::i8    });
+        test_print!({ i16   }, { std::primitive::i16   });
+        test_print!({ i32   }, { std::primitive::i32   });
+        test_print!({ i64   }, { std::primitive::i64   });
+        test_print!({ isize }, { std::primitive::isize });
+        test_print!({ f32   }, { std::primitive::f32   });
+        test_print!({ f64   }, { std::primitive::f64   });
+        test_print!({ bool  }, { std::primitive::bool  });
+        test_print!({ char  }, { std::primitive::char  });
     }
 
     #[test]
     fn test_pointers() {
-        test_print!(* mut u8);
-        test_print!(* const u8);
-        test_print!(& u8);
-        test_print!(& mut u8);
-        dbg_assert!(
-            parse_quote!(Type, fn(u8) -> u8)
-                .to_token_stream()
-                .to_string(),
-            "fn (u8) -> u8"
-        );
-        test_print!(Box < u8 >);
+        test_print!({ *mut u8       }, { *mut std::primitive::u8   });
+        test_print!({ *const u8     }, { *const std::primitive::u8 });
+        test_print!({ &u8           }, { &std::primitive::u8       });
+        test_print!({ &mut u8       }, { &mut std::primitive::u8   });
+        test_print!({ fn (u8) -> u8 }, { fn (u8) -> u8             });
+        test_print!({ Box<u8>       }, { std::boxed::Box<std::primitive::u8> });
     }
 
     #[test]
     fn test_collections() {
-        test_print!(str);
-        test_print!(& mut str);
-        test_print!(String);
-        test_print!([u8]);
-        test_print!(& mut [u8]);
-        dbg_assert!(
-            parse_quote!(Type, [u8; 8])
-                .to_token_stream()
-                .to_string(),
-            "[u8 ; 8]"
-        );
-        test_print!(Vec < Box < u8 > >);
+        test_print!({ str          }, { std::primitive::str       });
+        test_print!({ &mut str     }, { &mut std::primitive::str  });
+        test_print!({ String       }, { std::string::String       });
+        test_print!({ [u8]         }, { [std::primitive::u8]      });
+        test_print!({ &mut [u8]    }, { &mut [std::primitive::u8] });
+        test_print!({ [u8; 8]      }, { [std::primitive::u8; 8]   });
+        test_print!({ Vec<Box<u8>> }, { std::vec::Vec<std::boxed::Box<std::primitive::u8>> });
     }
 
     #[test]
     fn test_tuple() {
-        dbg_assert!(
-            parse_quote!(Type, (u8, String))
-                .to_token_stream()
-                .to_string(),
-            "(u8 , String)"
-        );
-        dbg_assert!(
-            parse_quote!(Type, (u8, Box<(usize, u8)>, String, &mut u8))
-                .to_token_stream()
-                .to_string(),
-            "(u8 , Box < (usize , u8) > , String , & mut u8)"
+        test_print!({ (u8, String) }, { (std::primitive::u8, std::string::String) });
+        test_print!(
+            { (u8, Box<(usize, u8)>, String, &mut u8) },
+            { (std::primitive::u8, std::boxed::Box<(std::primitive::usize, std::primitive::u8)>, std::string::String, &mut std::primitive::u8) }
         );
     }
 }

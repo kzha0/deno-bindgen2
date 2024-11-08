@@ -42,7 +42,7 @@ When using the `deno_bindgen` macro, users must take into account the following 
 | `std::primitive::str`   | `str`    |
 | `std::string::String`   | `String` |
 | `std::boxed::Box`       | `Box<T>` |
-| `std::collections::Vec` | `Vec<T>` |
+| `std::vec::Vec`         | `Vec<T>` |
 
 </details>
 

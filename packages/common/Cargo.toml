@@ -1,14 +1,18 @@
 [package]
 name = "deno-bindgen2-common"
-version = "0.1.0"
+version = "1.0.0"
 edition.workspace = true
 
 [dependencies]
 proc-macro2.workspace = true
 quote.workspace = true
 syn.workspace = true
+deno_ast.workspace = true
+dprint-plugin-typescript.workspace = true
+
+[dev-dependencies]
 prettyplease.workspace = true
 
 [features]
-cli = []
 macro = []
+cli = []

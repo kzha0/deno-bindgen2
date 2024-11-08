@@ -1,5 +1,5 @@
 use crate::rust::util::*;
-pub use crate::rust::{Attribute, Item, ItemFn, ItemImpl};
+pub use crate::rust::{Attribute, Item};
 
 /* -------------------------------------------------------------------------- */
 
@@ -21,12 +21,16 @@ impl Parse for ItemMod {
         input.parse::<Option<Token![unsafe]>>()?;
         input.parse::<Token![mod]>()?;
 
-        Self::parse_remaining(input, attr)
+        Self::parse_remaining(input, attr, false)
     }
 }
 
 impl ItemMod {
-    pub fn parse_remaining(input: ParseStream, mut attr: Attribute) -> Result<Self> {
+    pub fn parse_remaining(
+        input: ParseStream,
+        mut attr: Attribute,
+        filtered: bool,
+    ) -> Result<Self> {
         let ident: Ident = if input.peek(Token![try]) {
             input.call(Ident::parse_any)
         } else {
@@ -43,32 +47,12 @@ impl ItemMod {
             braced!(content in input);
             attr.parse_inner(&content)?;
 
-            items.append(&mut Self::parse_content(&content)?);
+            items.append(&mut Item::parse_many(&content, filtered)?);
         } else {
             return Err(ahead.error());
         }
 
         Ok(Self { attr, ident, items })
-    }
-
-    pub fn parse_content(input: ParseStream) -> Result<Vec<Item>> {
-        let mut items = Vec::new();
-
-        while !input.is_empty() {
-            let item = Item::parse(input)?;
-            // filter only `deno_bindgen` items
-            match &item {
-                Item::Fn(ItemFn { attr, .. }) | Item::Impl(ItemImpl { attr, .. }) => {
-                    if attr.has_deno_bindgen() {
-                        items.push(item)
-                    }
-                },
-                Item::Mod(_) => items.push(item),
-                _ => (),
-            }
-        }
-
-        Ok(items)
     }
 }
 

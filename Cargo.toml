@@ -11,6 +11,8 @@ members = [
 
 [workspace.package]
 edition = "2021"
+rust-version = "1.84"
+repository = "https://github.com/kzha0/deno-bindgen2/"
 
 [workspace.dependencies]
 deno-bindgen2-common = { path = "packages/common" }
@@ -21,10 +23,17 @@ deno-bindgen2 = { path = "packages/core" }
 proc-macro2 = "1"
 quote = "1"
 syn = { version = "2", features = ["full", "extra-traits", "parsing", "visit", "visit-mut"] }
-deno_ast = "0.42.2"
-dprint-plugin-typescript = "0.93.0"
+deno_ast = "0.43.3"
+dprint-plugin-typescript = "0.93.2"
 prettyplease = "^0.2"
 
 clap = { version = "4.5", features = ["derive"] }
 inquire = "0.7.5"
 cargo_metadata = "0.18.1"
+
+[profile.release-minimal]
+inherits = "release"
+lto = true
+opt-level = "z"
+panic = "abort"
+codegen-units = 1

@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
-use clap::{Args, Parser};
+use clap::Parser;
+use deno_bindgen2_common::CodegenOpts;
+
 
 // interactive mode if no subcommand was passed
 
@@ -19,7 +21,7 @@ use clap::{Args, Parser};
     long_about = None
 )]
 pub struct Cli {
-    /// Path to output file. Outputs to console if unspecified
+    /// Path to output file. Defaults to `<pkg_root>/dist/mod.ts` if unspecified
     #[arg(short = 'o', long, value_hint = clap::ValueHint::FilePath)]
     pub output: Option<PathBuf>,
 
@@ -27,60 +29,55 @@ pub struct Cli {
     #[arg(short = 'r', long)]
     pub release: bool,
 
-    #[command(flatten)]
-    pub codegen_flags: Option<CodegenFlags>,
-
-    // Operation mode flags
-    #[command(flatten)]
-    pub op_mode: Option<OpMode>,
-}
-
-#[derive(Clone, Debug, Args)]
-pub struct OpMode {
-    /// Disables source code expansion and module scanning
-    #[arg(short = 'e', long)]
-    no_expand: bool,
-
-    /// Disables guided mode
-    #[arg(short = 'i', long)]
-    no_interactive: bool,
-
-    /// Disables generation/linking of utility modules
-    #[arg(short = 'm', long)]
-    no_modules: bool,
-}
-
-#[derive(Clone, Debug, Args)]
-pub struct CodegenFlags {
     /// Lazily load the generated module. Useful when the dylib will be
     /// fetched/downloaded remotely.
     #[arg(short = 'l', long)]
-    lazy_load: bool,
+    lazy: bool,
 
-    /// Import utility modules remotely in generated module. Incompatible with
-    /// `--link-embed`
-    #[arg(short = 'R', long, group = "link")]
-    link_remote: bool,
+    /// Whether to print the rust type declarations in the same typescript
+    /// module or to write it on a separate file. Useful when linking together
+    /// multiple ffi libraries to use the same rust types
+    #[arg(short = 'i', long, group = "link")]
+    pub inline: bool,
 
-    /// Embed utility modules in generated module. Incompatible with
-    /// `--link-remote`
-    #[arg(short = 'E', long, group = "link")]
-    link_embed: bool,
+    /// If false, uses the opaque representations of rust types with no
+    /// implementation to interface with rust data structures
+    ///
+    /// If true, uses the extended rust types with methods for interfacing
+    /// with rust data structures, but embeds the ffi symbols on the same dyli
+    #[arg(short = 'e', long, default_value_t = true)]
+    pub extended: bool,
+
+    /// If provided, writes the extended rust types on a  separate
+    /// file and uses the dylib from this path for the typescript representation
+    /// of the extended rust types. Incompatible with `inline=true`
+    #[arg(short = 'm', long, group = "link")]
+    embedded: Option<PathBuf>,
+
+    /// Disables source code expansion and module scanning
+    #[arg(short = 'n', long)]
+    no_expand: bool,
+
+    /// Set to false to disable guided mode
+    #[arg(short = 'I', long)]
+    interactive: bool,
+
+    /// Disables generation/linking of utility modules
+    #[arg(short = 'N', long)]
+    no_modules: bool,
 }
 
 impl Cli {
-    /// attempt to start guided prompt mode for the CLI
-    pub fn try_interactive(&mut self) -> bool {
-        if let Some(op_mode) = &self.op_mode {
-            // if the user did not supress interactive mode
-            if op_mode.no_interactive {
-                false;
-            }
-        };
-        true
-    }
-
-    pub fn with_output(&mut self, output: &str) {
-        self.output = Some(PathBuf::from(output))
+    pub fn to_codegen_opts(&self, file_name: String, dylib_path: PathBuf) -> CodegenOpts {
+        CodegenOpts {
+            file_name,
+            dylib_path: dylib_path
+                .to_str()
+                .expect("unknown utf8 character on dylib path")
+                .to_string(),
+            lazy: self.lazy,
+            extended: self.extended,
+            embedded: self.embedded.clone(),
+        }
     }
 }

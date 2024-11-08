@@ -10,11 +10,14 @@ use crate::rust::Item;
 /// while the inert versions (the doc attributes ones) are used by the cli to
 /// control code generation. it does this by using the parser implementation
 /// here to read the marker info
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Marker {
     DenoBindgen, // marks a deno bindgen item. automatically inserted by the item macro
-    NonBlocking, // marks a function as non-blocking
-    Constructor, // marks a function as constructor
+    NonBlocking, /* marks a function as non-blocking */
+
+                 /* [!TODO] support for translating member visibility https://www.typescriptlang.org/docs/handbook/2/classes.html#member-visibility
+                  * interpret visibility of rust functions and interpolate as class visibility
+                  * useful for implementing internal methods */
 }
 
 // TODO: move from doc attributes to inert attributes
@@ -46,15 +49,6 @@ impl Marker {
         }
         .into()
     }
-
-    pub fn constructor(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
-        let input = TokenStream::from(input);
-        quote! {
-            #[cfg_attr(not(deno_bindgen), doc = "deno_bindgen_constructor")]
-            #input
-        }
-        .into()
-    }
 }
 
 /* -------------------------------------------------------------------------- */
@@ -62,7 +56,7 @@ impl Marker {
 // MARK: meta
 
 /// a document attribute meta in the form `doc = "value"`
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Meta {
     pub lit_str: LitStr,
 }
@@ -72,7 +66,6 @@ impl TryFrom<&Meta> for Marker {
         match value.lit_str.value().as_str() {
             "deno_bindgen" => Ok(Self::DenoBindgen),
             "deno_bindgen_non_blocking" => Ok(Self::NonBlocking),
-            "deno_bindgen_constructor" => Ok(Self::Constructor),
             _ => Err(Error::new(
                 value.lit_str.span(),
                 "unknown value. expected one of `deno_bindgen`, `deno_bindgen_non_blocking`, `deno_bindgen_constructor`"
@@ -90,7 +83,7 @@ impl Parse for Meta {
         if input.is_empty() {
             let key_str = key.to_string();
             match key_str.as_str() {
-                "constructor" | "non_blocking" => {
+                "non_blocking" => {
                     let lit_str = LitStr::new(
                         format!("deno_bindgen_{key_str}").as_str(),
                         Span::mixed_site(),
@@ -121,7 +114,7 @@ impl Parse for Meta {
 
 // MARK: attribute
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Attribute {
     pub markers: Vec<Marker>,
     pub meta:    Vec<Meta>,
@@ -136,17 +129,6 @@ impl Attribute {
             .iter()
             .find(|marker| match marker {
                 Marker::DenoBindgen => true,
-                _ => false,
-            })
-            .is_some()
-    }
-
-    /// checks if this attribute contains the `constructor` marker
-    pub fn has_constructor(&self) -> bool {
-        self.markers
-            .iter()
-            .find(|marker| match marker {
-                Marker::Constructor => true,
                 _ => false,
             })
             .is_some()
