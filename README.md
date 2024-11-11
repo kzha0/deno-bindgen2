@@ -44,13 +44,13 @@ fn test_2(string: String) -> String {
 Next, to generate the bindings and TypeScript code, you must install the CLI tool with the command below:
 
 ```bash
-cargo install deno_bindgen2
+cargo install deno-bindgen2
 ```
 
 Then, run this command in your project's package folder (not the workspace folder).
 
 ```bash
-deno_bindgen2 --release
+deno-bindgen2 --release
 ```
 
 This will automatically generate a TypeScript module in `<pkg_root>/dist/<your_module>`, along with another module `rust_type.ts` that contains TypeScript representations of Rust types.
