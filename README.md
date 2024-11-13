@@ -1,5 +1,9 @@
 # deno-bindgen2
 
+> [!WARNING] Work in Progress 🚧
+>
+> This documentation is currently incomplete and still a work in progress
+
 `deno-bindgen2` is an FFI bindings generator that simplifies writing Rust libraries for Deno.
 
 It works by providing procedural macros that create wrappers around native Rust functions and make it FFI-safe. This makes writing FFI libraries easier as it deals with boilerplate code generation so you don't have to.
@@ -11,6 +15,8 @@ This project works along with the `deno-bindgen2-utils` library (to be) publishe
 This project aims to empower TypeScript development by bridging access to Rust's powerful memory-safe ecosystem.
 
 ## To use
+
+This library depends on nightly rust features. It is recommended to set your project on the nightly tool chain as well to make the tool work as intended.
 
 Add the `deno-bindgen2` crate to your library crate's dependencies (note the spelling and dash `-` separator)
 
@@ -37,9 +43,11 @@ fn test_2(string: String) -> String {
 }
 ```
 
-> Note:
+> [!NOTE]
 >
 > Currently, `deno-bindgen2` only supports a limited set of Rust types that can be idiomatically converted or passed between Rust/Deno contexts. Although eventual support for all possible types is planned.
+>
+> See the [limitations](docs/limitations.md) documentation for more info
 
 Next, to generate the bindings and TypeScript code, you must install the CLI tool with the command below:
 

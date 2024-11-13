@@ -1,5 +1,9 @@
 # Setup
 
+> [!NOTE]
+> 
+> This information is outdated
+
 This project links directly to the rust compiler's (`rustc`) libraries as an optimization. Specifically, it uses the following crates:
 
 - `rustc_interface` to invoke compiler-specific funtionality, such as type-checking

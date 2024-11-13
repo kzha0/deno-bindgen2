@@ -2,6 +2,9 @@
 name = "deno-bindgen2-macro"
 version = "1.0.0"
 edition.workspace = true
+description = "Macros for the `deno_bindgen2` crate"
+repository.workspace = true
+license-file.workspace = true
 
 [lib]
 proc-macro = true
