@@ -285,6 +285,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(feature = "cli")]
     fn test_print() {
         let ffi_function = FfiFunction {
             ident:        format_ident!("some_symbol"),

@@ -57,6 +57,10 @@ impl ToTokens for ClassDefs {
     }
 }
 
+/* -------------------------------------------------------------------------- */
+
+// MARK: tests
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -86,6 +90,7 @@ mod tests {
 
 
     #[test]
+    #[cfg(feature = "cli")]
     fn test_print() {
         test_transform!(
             impl CustomType {

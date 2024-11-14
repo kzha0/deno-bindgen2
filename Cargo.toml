@@ -18,7 +18,7 @@ license-file = "LICENSE"
 
 [workspace.dependencies]
 deno-bindgen2 = { version = "1.0.0", path = "packages/core" }
-deno-bindgen2-common = { version = "1.0.0", path = "packages/common" }
+deno-bindgen2-common = { version = "1.0.1", path = "packages/common" }
 deno-bindgen2-macro = { version = "1.0.0", path = "packages/macro" }
 deno-bindgen2-utils = { version = "1.0.0", path = "packages/utils" }
 

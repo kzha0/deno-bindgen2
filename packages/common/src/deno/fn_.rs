@@ -269,6 +269,7 @@ mod print_tests {
     }
 
     #[test]
+    #[cfg(feature = "cli")]
     fn test_empty() {
         test_transform!(
             fn test_fn() {}
@@ -276,6 +277,7 @@ mod print_tests {
     }
 
     #[test]
+    #[cfg(feature = "cli")]
     fn test_u8() {
         test_transform!(
             fn test_fn(arg0: u8) {}
@@ -283,6 +285,7 @@ mod print_tests {
     }
 
     #[test]
+    #[cfg(feature = "cli")]
     fn test_return() {
         test_transform!(
             fn test_fn(arg0: u8) -> u8 {}
@@ -290,6 +293,7 @@ mod print_tests {
     }
 
     #[test]
+    #[cfg(feature = "cli")]
     fn test_many_args() {
         test_transform!(
             fn test_fn(arg0: &mut [u8], arg1: &str, arg2: Box<CustomType>, arg3: Vec<String>) {}

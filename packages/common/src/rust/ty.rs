@@ -598,7 +598,7 @@ mod parse_tests {
         );
         dbg_assert!(
             parse_quote!(Type, "CustomType", &mut Self),
-            Type::Ref(Box::new(Type::UserDefined(format_ident!("CustomType"))))
+            Type::RefMut(Box::new(Type::UserDefined(format_ident!("CustomType"))))
         );
     }
 

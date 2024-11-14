@@ -482,9 +482,9 @@ impl RustTypeDefs {
         const ALT_START: &'static str = "// <!-- deno-bindgen2-alt-type-start -->\n";
         const ALT_END: &'static str = "// <!-- deno-bindgen2-alt-type-end -->\n";
 
-        let util_file = include_str!("../../../utils/src/util.ts");
-        let core_file = include_str!("../../../utils/src/core.ts");
-        let extended_file = include_str!("../../../utils/src/extended.ts");
+        let util_file = include_str!("../ts/util.ts");
+        let core_file = include_str!("../ts/core.ts");
+        let extended_file = include_str!("../ts/extended.ts");
 
         let util = FileStr::new(&util_file).slice_between(CONTENT_START, CONTENT_END);
         let core_types = FileStr::new(&core_file).slice_between(CONTENT_START, CONTENT_END);
@@ -586,9 +586,19 @@ mod print_tests {
     use crate::deno::{FfiLib, TsFormat};
 
     #[test]
+    #[cfg(feature = "cli")]
+    fn test_include_str() {
+        let type_defs = RustTypeDefs::default();
+        let (module, _) = type_defs.print_inline();
+        println!("{module}");
+    }
+
+    #[test]
+    #[cfg(feature = "cli")]
     fn test_print() {}
 
     #[test]
+    #[cfg(feature = "cli")]
     fn print_type_def() {
         let mut type_defs = RustTypeDefs::default();
         type_defs.extended = true;

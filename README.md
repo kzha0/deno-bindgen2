@@ -1,6 +1,7 @@
 # deno-bindgen2
 
-> [!WARNING] Work in Progress 🚧
+> [!WARNING]
+> Work in Progress 🚧
 >
 > This documentation is currently incomplete and still a work in progress
 
@@ -23,7 +24,7 @@ Add the `deno-bindgen2` crate to your library crate's dependencies (note the spe
 ```toml
 # Cargo.toml
 [dependencies]
-deno-bindgen2 = "0.1.0"
+deno-bindgen2 = "1.0"
 ```
 
 Import *everything* from `deno_bindgen2` and use the `deno_bindgen` attribute macro on a function, implement, or struct item in your source code:
@@ -51,13 +52,13 @@ fn test_2(string: String) -> String {
 
 Next, to generate the bindings and TypeScript code, you must install the CLI tool with the command below:
 
-```bash
-cargo install deno-bindgen2
+```sh
+cargo install deno-bindgen2-cli
 ```
 
 Then, run this command in your project's package folder (not the workspace folder).
 
-```bash
+```sh
 deno-bindgen2 --release
 ```
 

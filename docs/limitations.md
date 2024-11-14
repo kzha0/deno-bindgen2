@@ -2,13 +2,16 @@
 
 This section describes some assumptions and limitations when using the `deno_bindgen2` tool
 
-> [!WARNING] Disclaimer
+> [!WARNING]
+>
+> Disclaimer
+>
 > Any discussion about Rust and its internal workings are based off the author's best understanding of the topic. Nothing written here should be construed as complete technical descriptions or explanations of the Rust language and its implementation
 
 ## Reserved Types
 
-> [!NOTE] TLDR
-> When using Rust's built-in types...
+> [!NOTE]
+> TLDR: When using Rust's built-in types...
 >
 > ❌ Don't use their fully qualified path `std::primitive::u8`\
 > ❌ Don't import `std::collections` nor write `collections::Vec<T>`\
