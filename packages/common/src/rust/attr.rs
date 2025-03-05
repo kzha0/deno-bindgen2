@@ -26,7 +26,7 @@ pub enum Marker {
 
 #[cfg(feature = "macro")]
 impl Marker {
-    pub fn deno_bindgen(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    pub fn deno_bindgen(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
         let input = TokenStream::from(input);
         let mut item: Item = match syn::parse2(input.clone()) {
             Ok(item) => item,
