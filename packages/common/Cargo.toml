@@ -5,7 +5,7 @@ edition.workspace = true
 description = "Common library used by the deno-bindgen2 project. Contains mainly implmenentations for parsing and transforming Rust source code."
 readme = "README.md"
 repository.workspace = true
-license-file.workspace = true
+license.workspace = true
 
 [dependencies]
 proc-macro2.workspace = true

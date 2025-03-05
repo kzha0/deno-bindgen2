@@ -5,7 +5,7 @@ edition.workspace = true
 description = "A CLI tool for parsing rust source code and generating a close TypeScript equivalent. works with the `deno_bindgen2` crate"
 readme.workspace = true
 repository.workspace = true
-license-file.workspace = true
+license.workspace = true
 
 [[bin]]
 name = "deno-bindgen2"

@@ -15,7 +15,7 @@ edition = "2021"
 description = "An FFI bindings generator for Deno"
 readme = "README.md"
 repository = "https://github.com/kzha0/deno-bindgen2/"
-license-file = "LICENSE"
+license = "MIT"
 
 [workspace.dependencies]
 deno-bindgen2 = { version = "1.0.0", path = "packages/core" }

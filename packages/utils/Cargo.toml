@@ -4,7 +4,7 @@ version = "1.0.0"
 edition.workspace = true
 description = "Contains utilities for interacting with rust data structures through FFI. Conditionally-compiled and embedded into the final shared library by the CLI tool"
 repository.workspace = true
-license-file.workspace = true
+license.workspace = true
 
 [dependencies]
 deno-bindgen2-macro.workspace = true
