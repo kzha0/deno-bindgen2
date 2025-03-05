@@ -1,6 +1,6 @@
 [package]
 name = "deno-bindgen2-utils"
-version = "1.0.0"
+version = "1.0.2"
 edition.workspace = true
 description = "Contains utilities for interacting with rust data structures through FFI. Conditionally-compiled and embedded into the final shared library by the CLI tool"
 repository.workspace = true

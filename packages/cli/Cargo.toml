@@ -1,6 +1,6 @@
 [package]
 name = "deno-bindgen2-cli"
-version = "1.0.0"
+version = "1.0.2"
 edition.workspace = true
 description = "A CLI tool for parsing rust source code and generating a close TypeScript equivalent. works with the `deno_bindgen2` crate"
 readme.workspace = true

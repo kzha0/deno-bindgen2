@@ -1,6 +1,6 @@
 [package]
 name = "deno-bindgen2-common"
-version = "1.0.1"
+version = "1.0.2"
 edition.workspace = true
 description = "Common library used by the deno-bindgen2 project. Contains mainly implmenentations for parsing and transforming Rust source code."
 readme = "README.md"

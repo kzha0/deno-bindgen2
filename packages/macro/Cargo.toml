@@ -1,6 +1,6 @@
 [package]
 name = "deno-bindgen2-macro"
-version = "1.0.0"
+version = "1.0.2"
 edition.workspace = true
 description = "Macros for the `deno_bindgen2` crate"
 repository.workspace = true

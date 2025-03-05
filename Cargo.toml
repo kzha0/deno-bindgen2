@@ -18,17 +18,17 @@ repository = "https://github.com/kzha0/deno-bindgen2/"
 license = "MIT"
 
 [workspace.dependencies]
-deno-bindgen2 = { version = "1.0.0", path = "packages/core" }
-deno-bindgen2-common = { version = "1.0.1", path = "packages/common" }
-deno-bindgen2-macro = { version = "1.0.0", path = "packages/macro" }
-deno-bindgen2-utils = { version = "1.0.0", path = "packages/utils" }
+deno-bindgen2 = { version = "1.0.2", path = "packages/core" }
+deno-bindgen2-common = { version = "1.0.2", path = "packages/common" }
+deno-bindgen2-macro = { version = "1.0.2", path = "packages/macro" }
+deno-bindgen2-utils = { version = "1.0.2", path = "packages/utils" }
 
 proc-macro2 = "1"
 quote = "1"
 syn = { version = "2", features = ["full", "extra-traits", "parsing", "visit", "visit-mut"] }
-deno_ast = "0.43.3"
-dprint-plugin-typescript = "0.93.2"
-prettyplease = "^0.2"
+deno_ast = "0.45.1"
+dprint-plugin-typescript = "0.93.4"
+prettyplease = "0.2"
 
 clap = { version = "4.5", features = ["derive"] }
 inquire = "0.7.5"
