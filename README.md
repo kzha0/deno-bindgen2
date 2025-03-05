@@ -16,7 +16,7 @@ This project aims to empower TypeScript development by bridging access to Rust's
 
 ## To use
 
-This library depends on nightly rust features. It is recommended to set your project on the [nightly tool chain]((https://rust-lang.github.io/rustup/overrides.html#the-toolchain-file)) to make sure the tool works as intended.
+This library depends on nightly rust features. It is recommended to set your project on the [nightly tool chain](https://rust-lang.github.io/rustup/overrides.html#the-toolchain-file) to make sure the tool works as intended.
 
 Add the `deno-bindgen2` crate to your library crate's dependencies (note the spelling and dash `-` separator)
 
@@ -98,6 +98,10 @@ Hello from Deno to Rust!
 ```
 
 For additional code generation options, run `deno-bindgen2 --help`
+
+## Examples
+
+Check out the [test directory](packages/test) to see some examples
 
 ## Performance
 

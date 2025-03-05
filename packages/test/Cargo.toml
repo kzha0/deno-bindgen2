@@ -8,4 +8,4 @@ crate-type = ["cdylib"]
 path = "lib.rs"
 
 [dependencies]
-deno-bindgen2.workspace = true
+deno-bindgen2 = "1.0.2"
