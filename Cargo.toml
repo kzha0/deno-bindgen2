@@ -6,6 +6,7 @@ members = [
     "packages/utils",
     "packages/core",
     "packages/cli",
+    "packages/bench"
 ]
 exclude = ["packages/test"]
 

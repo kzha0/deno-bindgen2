@@ -99,3 +99,7 @@ Hello from Deno to Rust!
 ```
 
 For additional code generation options, run `deno-bindgen2 --help`
+
+## Performance
+
+This project improves proc macro performance by [as much as 15x](packages/bench/bench_data.md) over `deno_bindgen`, reducing processing time from ~0.30 ms to ~0.02 ms

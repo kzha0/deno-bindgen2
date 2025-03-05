@@ -1,0 +1,13 @@
+[package]
+name = "bench"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+deno-bindgen2.workspace = true
+deno-bindgen2-common = { workspace = true, features = ["macro"] }
+quote = "1"
+proc-macro2 = "1"
